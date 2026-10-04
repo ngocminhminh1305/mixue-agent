@@ -10,11 +10,11 @@ This records my Task Decomposition intervention for the HS2924 Rewiring Project.
 |||3. Build|1. Create extraction script<br>2. Build local frontend website<br>3. Load one sales image on the frontend to extract<br>4. Inspect the extract output<br>5. Interate the Extract process when the output is accepted (I expect that I will have to try at least 3-4 models, simple OCR did not work so need to find better model)|
 |||4. Sequential Order|Inspect image→ Study extraction process→ Research methods→ Choose one method→ Create script→ Load image→ Set up extractor→ Run extraction→ Save result→ Compare result|
 |||5. Closing prompt: What, if anything, feels clearer or more manageable after this session?|I hope that with a specific list of tasks to do, I can feel less overwhelmed when I work on the project. Because honestly, if I start on the project with an empty head of what to do, I feel a bit lazy to start on it. To conclude, the tasks to do on in the next week are clearer to me after this session|
-| **04 Oct 2026** | |1. Feature I will work on| |
-|||2. Study / Research||
-|||3. Build||
-|||4. Sequential Order||
-|||5. Closing prompt: What, if anything, feels clearer or more manageable after this session?||
+| **04 Oct 2026** |11.06- 11.19pm|1. Feature I will work on|**Finish Model API to extract image** <br> **Implement database** <br> - Minimum: Model API extracts correctly, so focus on prompting, giving context for the model <br> **Shop data collection** <br> - Don't have to finish insert all data in, but need to send to mom data I want to collect, discuss with her everything about the data, It is good to have all data collected by this week |
+|||2. Study / Research| 1. Find a free API model, the one with the best performance <br> 2. Restudy CS2102 to see relational database design, how to run SQL in Python app <br> 3. Restudy DSA2111 topics: How to containerize, docker for database, should I need non-relational database. It is the best to have relational database only, simplest setup |
+|||3. Build| 1. Finish Model API, how to set up the API key <br> 2. Finish database implementation which means find the hosting app, where can I see the database schema, run query, insert|
+|||4. Sequential Order|1. Find API model <br> 2. Implement API model in my app <br> 3. Restudy CS2102 <br> 4. Restudy DSA2111 <br> 5. Implement database|
+|||5. Closing prompt: What, if anything, feels clearer or more manageable after this session?|- I feel like this is a very correct time to do this project, this semester I studied some non-required courses for my major, but I think those courses are relevant so I want to study. Those courses teach some topics really relevant to my project such as design the database, implement the database. So, I am very clear now on what to study, how to build|
 | **11 Oct 2026** | |1. Feature I will work on| |
 |||2. Study / Research||
 |||3. Build||
@@ -48,3 +48,4 @@ This records my Task Decomposition intervention for the HS2924 Rewiring Project.
 - I only use AI to asking technical stuffs, this file is 100% written by me
 - The duration is longer than expected because typing on a markdown file is typing on the raw version, and I usually have to Ctrl+Shift+V to see the preview version (which at the end of the project, I will export to PDF, and PDF follows the preview version)
 - I only timer the duration I was typing on this markdown file because it goes through the decomposition process I specified in the Rewiring Proposal, I would not timer the mindmap sketching process on paper
+2. Prof's comment: `Record the actual time you spend on these practices during implementation.`
