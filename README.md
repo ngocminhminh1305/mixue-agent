@@ -82,3 +82,43 @@ Real shop data may be used privately for development, but the public repository 
 ## Status
 
 **In development**
+
+## Run the image extraction prototype
+
+The local Python backend serves a browser interface for uploading a sales photo,
+reviewing extracted dates, item names, and quantities, and downloading JSON.
+It does not save reports or update inventory yet.
+
+```sh
+source /Users/ngocminh/Desktop/venvs/mixue-agent/bin/activate
+python -m pip install -r requirements.txt
+cp .env.example .env  # Only if .env does not already exist
+```
+
+Set `GEMINI_API_KEY` in `.env`. Keep it private; `.env` is excluded from Git.
+The default model is `gemini-3.5-flash-lite`, optimized for simple extraction.
+The connection timeout is 20 seconds and response timeout is 180 seconds.
+Keep your Google project on the free
+tier without paid billing if you want to avoid charges; a free tier is subject
+to account quotas and availability. The application cannot determine your
+Google project's billing status.
+
+```sh
+python -m uvicorn app:app --host 127.0.0.1 --port 8000
+```
+
+Open http://127.0.0.1:8000 and choose a JPG, PNG, or WebP under 10 MB.
+Click **Extract sales** to send the photo to Google Gemini. No photos or results
+are persisted by the application. Free-tier Gemini inputs may be used by Google
+to improve its products. Review results against the original photo; cropped or
+unreadable rows need attention. This is a local development tool, without login.
+
+The backend re-reads `.env` for each request. After adding your key, select a
+photo again to refresh the interface's configuration status. One click makes
+one provider request, with no automatic retry or paid fallback.
+
+Run offline checks (no API key or provider calls required):
+
+```sh
+python -m unittest discover -s tests -v
+```
