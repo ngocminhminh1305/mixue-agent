@@ -13,6 +13,12 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from jsonschema import Draft202012Validator, FormatChecker
 from PIL import Image, UnidentifiedImageError
+from shop_config import router as shop_router
+from sales import router as sales_router
+from reversals import router as reversals_router
+from inventory_api import router as inventory_router
+from analytics import router as analytics_router
+from assistant import router as assistant_router
 
 ROOT = Path(__file__).resolve().parent
 SCHEMA = json.loads((ROOT / "extraction/report.schema.json").read_text())
@@ -20,6 +26,12 @@ VALIDATOR = Draft202012Validator(SCHEMA, format_checker=FormatChecker())
 PROMPT = (ROOT / "extraction/prompt.md").read_text()
 MAX_BYTES = 10 * 1024 * 1024
 app = FastAPI(title="BobaOps image extraction")
+app.include_router(shop_router)
+app.include_router(sales_router)
+app.include_router(reversals_router)
+app.include_router(inventory_router)
+app.include_router(analytics_router)
+app.include_router(assistant_router)
 
 
 def settings():
@@ -75,7 +87,37 @@ def provider_error(response, key):
 
 @app.get("/")
 def index():
-    return FileResponse(ROOT / "frontend/index.html")
+    return FileResponse(ROOT / "frontend/index.html", headers={"Cache-Control": "no-store"})
+
+
+@app.get('/setup')
+def shop_setup():
+    return FileResponse(ROOT / 'frontend/setup.html', headers={'Cache-Control': 'no-store'})
+
+
+@app.get('/sales')
+def saved_sales():
+    return FileResponse(ROOT / 'frontend/sales.html', headers={'Cache-Control': 'no-store'})
+
+
+@app.get('/inventory')
+def inventory_page():
+    return FileResponse(ROOT / 'frontend/inventory.html', headers={'Cache-Control': 'no-store'})
+
+
+@app.get('/chat')
+def chat_page():
+    return FileResponse(ROOT / 'frontend/chat.html', headers={'Cache-Control': 'no-store'})
+
+
+@app.get('/dashboard')
+def dashboard_page():
+    return FileResponse(ROOT / 'frontend/dashboard.html', headers={'Cache-Control': 'no-store'})
+
+
+@app.get('/assets/chartjs-4.5.1.js')
+def chartjs_asset():
+    return FileResponse(ROOT / 'frontend/vendor/chartjs/chart.umd.min.js', media_type='text/javascript')
 
 
 @app.get("/api/status")

@@ -8,7 +8,7 @@
   </style>
 </head>
 <body><main>
-  <header><div class="brand">BOBAOPS AI</div><h1>Turn a sales photo into data.</h1><p>Upload your daily report and check its date, product names, and quantities.</p></header>
+  <header><div class="brand">BOBAOPS AI</div><p><a href="/setup">Shop setup →</a> · <a href="/sales">Saved sales →</a> · <a href="/inventory">Inventory →</a> · <a href="/dashboard">Dashboard →</a> · <a href="/chat">Trợ lý AI</a></p><h1>Turn a sales photo into data.</h1><p>Upload your daily report and check its date, product names, and quantities.</p></header>
   <div class="layout">
     <section class="card"><h2>1. Upload a report</h2><p>JPG, PNG, or WebP · up to 10 MB. Your photo is sent to Google Gemini when you click Extract.</p>
       <label for="image">Sales report photo</label><input id="image" type="file" accept="image/jpeg,image/png,image/webp">
@@ -16,19 +16,23 @@
       <p id="status" role="status"></p><div id="error" role="alert" hidden></div><img id="preview" alt="Uploaded sales report" hidden>
     </section>
     <section class="card"><h2>2. Check the extraction</h2><p>Compare every row with the photo before using it for inventory calculations.</p>
+      <div class="actions"><button id="save-draft" disabled>Save sales draft</button><a href="/sales">View saved sales →</a></div>
+      <p id="save-status" role="status"></p><a id="review-link" hidden>Review saved draft →</a>
       <div id="empty" class="empty">Your extracted sales will appear here.</div>
-      <div id="result" hidden><div class="meta"><span id="date"></span><span id="count"></span></div>
+      <div id="result" hidden><div class="meta"><label>Report date <input id="date" type="date" required></label><span id="count"></span></div>
         <div id="warnings"></div><table><thead><tr><th>ITEM NAME</th><th>QUANTITY</th></tr></thead><tbody id="rows"></tbody></table>
         <div class="actions"><a id="download" class="download" download="sales.json">Download JSON</a></div>
+        <p>Save each photo for the same date to one daily draft. Review overlapping rows on Saved sales. Saving does not deduct inventory.</p>
         <details><summary>View JSON</summary><pre id="json"></pre></details>
       </div>
     </section>
   </div>
 </main>
 <script>
-const $=id=>document.getElementById(id);let configured=false,previewURL=null,downloadURL=null;
+const $=id=>document.getElementById(id);let configured=false,previewURL=null,downloadURL=null,extracted=null;
 async function checkStatus(){try{const response=await fetch('/api/status');if(!response.ok)throw Error();const s=await response.json();configured=s.key_configured;$('status').textContent=configured?'Key configured · '+s.model:'Add your key to .env, then choose a photo. The key is loaded automatically.';}catch{configured=false;$('status').textContent='Cannot reach the backend.'}}
 $('image').addEventListener('change',async()=>{
+  extracted=null;$('save-draft').disabled=true;$('save-status').textContent='';$('review-link').hidden=true;
   $('result').hidden=true;$('empty').hidden=false;$('error').hidden=true;$('extract').disabled=true;$('preview').hidden=true;
   if(previewURL){URL.revokeObjectURL(previewURL);previewURL=null}if(downloadURL){URL.revokeObjectURL(downloadURL);downloadURL=null}
   const file=$('image').files[0];if(!file)return;
@@ -37,18 +41,32 @@ $('image').addEventListener('change',async()=>{
   await checkStatus();$('extract').disabled=!configured;
 });
 $('extract').addEventListener('click',async()=>{
+  extracted=null;$('save-draft').disabled=true;$('save-status').textContent='';$('review-link').hidden=true;
   $('extract').disabled=true;$('image').disabled=true;$('busy').textContent='Reading the photo…';$('error').hidden=true;$('result').hidden=true;$('empty').hidden=false;
   const started=Date.now();const progress=setInterval(()=>{$('busy').textContent='Reading the photo… '+Math.floor((Date.now()-started)/1000)+'s';},1000);
   try{
     const form=new FormData();form.append('image',$('image').files[0]);
     const response=await fetch('/api/extract',{method:'POST',body:form});const data=await response.json();
     if(!response.ok)throw Error(typeof data.detail==='string'?data.detail:'Extraction failed.');
-    $('date').textContent='Date: '+(data.date||'Needs review');$('count').textContent=data.items.length+' items';$('rows').replaceChildren();$('warnings').replaceChildren();
+    extracted=data;$('save-draft').disabled=false;$('date').value=data.date||'';$('count').textContent=data.items.length+' items';$('rows').replaceChildren();$('warnings').replaceChildren();
     for(const issue of data.issues){const p=document.createElement('p');p.className='warning';p.textContent=issue;$('warnings').append(p)}
     for(const item of data.items){const tr=document.createElement('tr'),name=document.createElement('td'),quantity=document.createElement('td');name.textContent=item.item_name||'Unreadable name';quantity.textContent=item.quantity??'—';for(const issue of item.issues){const note=document.createElement('span');note.className='row-issue';note.textContent=issue;name.append(note)}tr.append(name,quantity);$('rows').append(tr)}
     const json=JSON.stringify(data,null,2);$('json').textContent=json;if(downloadURL)URL.revokeObjectURL(downloadURL);downloadURL=URL.createObjectURL(new Blob([json],{type:'application/json'}));$('download').href=downloadURL;$('download').download='sales-'+(data.date||'review')+'.json';$('result').hidden=false;$('empty').hidden=true;
   }catch(error){$('error').textContent=error.message;$('error').hidden=false;}
   finally{clearInterval(progress);$('busy').textContent='';$('extract').disabled=!configured;$('image').disabled=false;}
+});
+$('save-draft').addEventListener('click',async()=>{
+  if(!extracted)return;
+  if(!$('date').value||!$('date').reportValidity()){$('save-status').textContent='Choose the report date before saving.';return}
+  $('save-draft').disabled=true;$('extract').disabled=true;$('image').disabled=true;$('date').disabled=true;$('error').hidden=true;$('save-status').textContent='Saving draft…';
+  try{
+    const form=new FormData();form.append('report',JSON.stringify(extracted));form.append('report_date',$('date').value);form.append('image',$('image').files[0]);
+    const response=await fetch('/api/sales/drafts',{method:'POST',body:form});const data=await response.json();
+    if(!response.ok)throw Error(typeof data.detail==='string'?data.detail:'Could not save the draft.');
+    $('save-status').textContent='Saved for '+data.date+' · '+data.images.length+' photo(s). Inventory unchanged.';
+    $('review-link').href='/sales?report='+encodeURIComponent(data.id);$('review-link').hidden=false;
+  }catch(error){$('error').textContent=error.message;$('error').hidden=false;$('save-status').textContent='';$('save-draft').disabled=false}
+  finally{$('extract').disabled=!configured;$('image').disabled=false;$('date').disabled=false}
 });
 checkStatus();
 </script></body></html>
