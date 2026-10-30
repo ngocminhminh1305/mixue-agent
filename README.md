@@ -52,10 +52,10 @@ Grounded AI Assistant
 
 - **Backend:** Python, FastAPI, Pydantic
 - **Database:** PostgreSQL, SQLAlchemy
-- **Data:** Pandas
-- **Frontend:** Next.js, TypeScript, Tailwind
-- **Testing:** Pytest
-- **Deployment:** Docker, GitHub Actions
+- **Data:** scikit-learn (TF-IDF and cosine similarity)
+- **Frontend:** HTML, CSS, JavaScript, Chart.js
+- **Testing:** unittest and isolated PostgreSQL integration tests
+- **Local infrastructure:** Docker Compose for PostgreSQL
 - **AI:** LLM API with structured tool calling
 
 ## Development Approach
@@ -108,8 +108,8 @@ Google project's billing status.
 python3 -m uvicorn app:app --host 127.0.0.1 --port 8000
 ```
 
-Open http://127.0.0.1:8000 and choose a JPG, PNG, or WebP under 10 MB.
-Click **Extract sales** to send the photo to Google Gemini. Photos and results
+Open http://127.0.0.1:8000 for Tổng quan. Select **Nhập doanh số** (`/upload`)
+and choose a JPG, PNG, or WebP under 10 MB. Click **Trích xuất** to send the photo to Google Gemini. Photos and results
 are persisted only when you explicitly save a draft. Free-tier Gemini inputs may be used by Google
 to improve its products. Review results against the original photo; cropped or
 unreadable rows need attention. This is a local development tool, without login.
@@ -191,3 +191,14 @@ Record daily ice-cream powder totals in Inventory, including powders in discarde
 The confirmed menu and synthetic carton purchase data can be imported together with historical records preserved. See [catalog import and verification](docs/confirmed-catalog.md). Purchases and stock in the demo dataset are invented examples.
 
 Receipt names use exact matching followed by local character TF-IDF/cosine ranking, with guarded automatic choices and manual suggestions. See [product matching](docs/product-matching.md).
+
+
+## Project layout
+
+- `bobaops/`: backend package, grouped into catalog, extraction, sales, inventory, analytics and assistant features.
+- `bobaops/core/`: shared database configuration and project paths.
+- `scripts/`: administrative imports, run with `python3 -m scripts.<name>`.
+- `frontend/`: HTML, CSS and JavaScript.
+- `migrations/`, `tests/`, `docs/`: database history, checks and documentation.
+
+`app.py` is a small entry point, so the existing `uvicorn app:app` command still works. See [the code structure guide](docs/code-structure.md) for the full tree and updated import commands. Private data and `.env` remain in their existing locations.

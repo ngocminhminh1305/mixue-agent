@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 import app
+from bobaops.extraction import routes as extraction
 
 
 class ExtractionTests(unittest.TestCase):
@@ -59,11 +60,11 @@ class ExtractionTests(unittest.TestCase):
 
     def test_invalid_date_is_rejected(self):
         with self.assertRaises(ValueError):
-            app.validate_report({'date': '2026-02-30', 'items': [], 'issues': []})
+            extraction.validate_report({'date': '2026-02-30', 'items': [], 'issues': []})
 
     def test_provider_error_explains_schema_failure_and_redacts_key(self):
         reply = httpx.Response(400, json={'error': {'message': 'Unsupported field responseJsonSchema secret-test-key'}})
-        message = app.provider_error(reply, 'secret-test-key')
+        message = extraction.provider_error(reply, 'secret-test-key')
         self.assertIn('HTTP 400', message)
         self.assertIn('Unsupported field', message)
         self.assertNotIn('secret-test-key', message)

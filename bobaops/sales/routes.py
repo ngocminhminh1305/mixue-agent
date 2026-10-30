@@ -7,7 +7,6 @@ from collections import Counter, defaultdict
 from contextlib import contextmanager
 from datetime import date, datetime, timezone
 from decimal import Decimal
-from bobaops.core.paths import PRIVATE_DATA_DIR
 from uuid import uuid4
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
@@ -19,6 +18,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from bobaops.core.database import get_engine, get_tables, storage_backend
+from bobaops.core.paths import PRIVATE_DATA_DIR
 
 router = APIRouter(prefix='/api/sales')
 IMAGE_DIR = PRIVATE_DATA_DIR / 'sales_images'
