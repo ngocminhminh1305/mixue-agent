@@ -8,6 +8,8 @@ import unittest
 
 from fastapi.testclient import TestClient
 
+from auth_support import authenticated_client
+
 import app
 from bobaops.core.paths import FRONTEND_DIR, PRIVATE_DATA_DIR, ROOT
 from bobaops.extraction import routes as extraction
@@ -17,7 +19,7 @@ from bobaops.main import app as packaged_app
 class StructureTests(unittest.TestCase):
     def test_existing_uvicorn_entry_point_and_frontend_assets(self):
         self.assertIs(app.app, packaged_app)
-        client = TestClient(packaged_app)
+        client = authenticated_client(self, packaged_app)
         for path in ('/', '/dashboard', '/upload', '/sales', '/inventory', '/setup', '/chat',
                      '/assets/app.css', '/assets/ui.js', '/assets/receipt-powders.js'):
             self.assertEqual(client.get(path).status_code, 200, path)
@@ -43,7 +45,8 @@ from scripts import import_shop_config, import_confirmed_catalog
 assert PROMPT.strip()
 assert callable(import_shop_config.main)
 assert callable(import_confirmed_catalog.main)
-assert TestClient(app).get('/upload').status_code == 200
+assert TestClient(app).get('/login').status_code == 200
+assert TestClient(app).get('/upload', follow_redirects=False).status_code == 303
 """
         with tempfile.TemporaryDirectory() as directory:
             result = subprocess.run([sys.executable, '-c', code], cwd=directory,

@@ -6,6 +6,8 @@ from bobaops.analytics.routes import router as analytics_router
 from bobaops.assistant.routes import router as assistant_router
 from bobaops.catalog.routes import router as shop_router
 from bobaops.core.paths import FRONTEND_DIR
+from bobaops.auth.routes import router as auth_router
+from bobaops.auth.middleware import PrivateAppMiddleware
 from bobaops.extraction.routes import router as extraction_router
 from bobaops.inventory.routes import router as inventory_router
 from bobaops.inventory.powder_usage import router as ice_cream_usage_router
@@ -13,6 +15,8 @@ from bobaops.sales.routes import router as sales_router
 from bobaops.sales.reversals import router as reversals_router
 
 app = FastAPI(title="BobaOps")
+app.add_middleware(PrivateAppMiddleware)
+app.include_router(auth_router)
 for router in (shop_router, sales_router, reversals_router, inventory_router,
                ice_cream_usage_router, analytics_router, assistant_router, extraction_router):
     app.include_router(router)

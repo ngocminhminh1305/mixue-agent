@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 import httpx
 from fastapi.testclient import TestClient
+from auth_support import authenticated_client
 from PIL import Image
 
 import app
@@ -12,7 +13,7 @@ from bobaops.extraction import routes as extraction
 
 class ExtractionTests(unittest.TestCase):
     def setUp(self):
-        self.client = TestClient(app.app)
+        self.client = authenticated_client(self, app.app)
         image = io.BytesIO()
         Image.new('RGB', (10, 10)).save(image, format='PNG')
         self.image = image.getvalue()

@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from sqlalchemy import MetaData, create_engine, text
 from fastapi.testclient import TestClient
+from auth_support import authenticated_client
 from PIL import Image
 
 import app
@@ -57,7 +58,7 @@ class PostgresTests(unittest.TestCase):
             mocked = patch(name, return_value='postgres')
             mocked.start()
             self.addCleanup(mocked.stop)
-        self.client = TestClient(app.app)
+        self.client = authenticated_client(self, app.app)
         self.config = ShopConfig.model_validate(sample())
 
     def drop_schema(self):
@@ -67,6 +68,67 @@ class PostgresTests(unittest.TestCase):
     def scalar(self, sql):
         with self.engine.connect() as conn:
             return conn.scalar(text(sql))
+
+    def test_auth_sessions_are_persistent_revocable_and_bound_to_credentials(self):
+        from dataclasses import replace
+        import secrets
+        from auth_support import TEST_SETTINGS
+        from bobaops.auth.store import PostgresStore
+        from bobaops.auth.security import session_digest
+        database = PostgresStore(self.engine)
+        sid = secrets.token_urlsafe(32)
+        database.create(sid, TEST_SETTINGS)
+        another_worker = PostgresStore(self.engine)
+        self.assertTrue(another_worker.valid(sid, TEST_SETTINGS))
+        self.assertFalse(another_worker.valid(sid, replace(TEST_SETTINGS, username='new-owner')))
+        with self.engine.connect() as conn:
+            token = conn.scalar(text('SELECT token_hash FROM auth_sessions'))
+        self.assertEqual(token, session_digest(sid))
+        self.assertNotEqual(token, sid)
+        another_worker.revoke(sid)
+        self.assertFalse(database.valid(sid, TEST_SETTINGS))
+        sid2 = secrets.token_urlsafe(32)
+        database.create(sid2, TEST_SETTINGS)
+        with self.engine.begin() as conn:
+            conn.execute(text("UPDATE auth_sessions SET expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second'"))
+        self.assertFalse(database.valid(sid2, TEST_SETTINGS))
+
+    def test_auth_login_limits_are_atomic_across_workers_and_expire(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from bobaops.auth.store import PostgresStore
+        database = PostgresStore(self.engine)
+        def attempt(_):
+            return PostgresStore(self.engine).reserve_attempt('a' * 64)
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            results = list(pool.map(attempt, range(6)))
+        self.assertEqual(results.count(0), 5)
+        self.assertEqual(sum(value > 0 for value in results), 1)
+        with self.engine.begin() as conn:
+            conn.execute(text("UPDATE auth_login_limits SET window_started_at = CURRENT_TIMESTAMP - INTERVAL '16 minutes'"))
+        self.assertEqual(database.reserve_attempt('a' * 64), 0)
+        self.assertEqual(self.scalar('SELECT attempts FROM auth_login_limits'), 1)
+        database.clear_attempts('a' * 64)
+        self.assertEqual(self.scalar('SELECT count(*) FROM auth_login_limits'), 0)
+
+    def test_auth_login_and_logout_use_the_real_postgres_session_store(self):
+        from auth_support import TEST_PASSWORD
+        from bobaops.auth import store
+        from bobaops.auth.security import COOKIE
+        with patch.object(store, 'get_store', return_value=store.PostgresStore(self.engine)):
+            with TestClient(app.app) as client:
+                token = client.get('/api/auth/login').json()['csrf_token']
+                response = client.post('/api/auth/login', headers={'X-CSRF-Token': token},
+                                       json={'username': 'test-owner', 'password': TEST_PASSWORD})
+                self.assertEqual(response.status_code, 200)
+                saved_cookie = client.cookies.get(COOKIE)
+                session = client.get('/api/auth/session')
+                self.assertEqual(session.status_code, 200)
+                csrf = session.json()['csrf_token']
+                self.assertEqual(self.scalar('SELECT count(*) FROM auth_sessions'), 1)
+                self.assertEqual(client.post('/api/auth/logout', headers={'X-CSRF-Token': csrf}).status_code, 200)
+                client.cookies.set(COOKIE, saved_cookie)
+                self.assertEqual(client.get('/api/auth/session').status_code, 401)
+                self.assertEqual(self.scalar('SELECT count(*) FROM auth_sessions WHERE revoked_at IS NOT NULL'), 1)
 
     def test_import_roundtrip_and_repeat_import_refused(self):
         saved = write_config(self.config, initial_import=True)
@@ -351,7 +413,7 @@ class PostgresTests(unittest.TestCase):
         url = '/api/sales/reports/' + draft['id'] + '/approve'
         body = self.approval_body(preview)
         def approve(_):
-            return TestClient(app.app).post(url, json=body).status_code
+            return TestClient(app.app, cookies=self.client.cookies, headers=self.client.headers).post(url, json=body).status_code
         with ThreadPoolExecutor(max_workers=2) as pool:
             statuses = sorted(pool.map(approve, range(2)))
         self.assertEqual(statuses, [200, 409])
@@ -470,7 +532,7 @@ class PostgresTests(unittest.TestCase):
         write_config(self.config, initial_import=True)
         data = {'request_id': str(uuid4()), 'purchased_on': '2026-10-22', 'items': [{'item_id': 'powder', 'quantity': '1000'}]}
         def purchase(_):
-            return TestClient(app.app).post('/api/inventory/purchases', json=data).status_code
+            return TestClient(app.app, cookies=self.client.cookies, headers=self.client.headers).post('/api/inventory/purchases', json=data).status_code
         with ThreadPoolExecutor(max_workers=2) as pool:
             self.assertEqual(list(pool.map(purchase, range(2))), [201, 201])
         self.assertEqual(self.scalar('SELECT count(*) FROM purchases'), 1)
@@ -718,7 +780,7 @@ class PostgresTests(unittest.TestCase):
         _, report = self.approved_for_reversal()
         body = self.reversal_body(report)
         def reverse(_):
-            return TestClient(app.app).post('/api/sales/reports/' + report['id'] + '/reverse', json=body).status_code
+            return TestClient(app.app, cookies=self.client.cookies, headers=self.client.headers).post('/api/sales/reports/' + report['id'] + '/reverse', json=body).status_code
         with ThreadPoolExecutor(max_workers=2) as pool:
             statuses = list(pool.map(reverse, range(2)))
         self.assertEqual(statuses, [200, 200])
@@ -831,7 +893,7 @@ class PostgresTests(unittest.TestCase):
         image = buffer.getvalue()
         def upload(day):
             extraction = {'date': day, 'items': [{'item_name': 'Tea M', 'quantity': 1, 'issues': []}], 'issues': []}
-            return TestClient(app.app).post('/api/sales/drafts', data={'report': json.dumps(extraction), 'report_date': day},
+            return TestClient(app.app, cookies=self.client.cookies, headers=self.client.headers).post('/api/sales/drafts', data={'report': json.dumps(extraction), 'report_date': day},
                         files={'image': ('photo.png', image, 'image/png')}).status_code
         with ThreadPoolExecutor(max_workers=2) as pool:
             statuses = list(pool.map(upload, ['2026-10-22', '2026-10-23']))
@@ -978,7 +1040,7 @@ class PostgresTests(unittest.TestCase):
         self.ice_cream_fixture()
         body = self.ice_cream_body()
         def save(_):
-            return TestClient(app.app).post('/api/inventory/ice-cream-usage', json=body).status_code
+            return TestClient(app.app, cookies=self.client.cookies, headers=self.client.headers).post('/api/inventory/ice-cream-usage', json=body).status_code
         with ThreadPoolExecutor(max_workers=2) as pool:
             self.assertEqual(list(pool.map(save, range(2))), [200, 200])
         self.assertEqual(self.stock_state()['quantity'], '3500.000000')

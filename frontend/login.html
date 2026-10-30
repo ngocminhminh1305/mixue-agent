@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Đăng nhập · BobaOps</title>
+  <link rel="stylesheet" href="/assets/app.css">
+  <script defer src="/assets/login.js"></script>
+</head>
+<body class="login-body">
+  <main class="login-card">
+    <div class="app-brand"><span class="brand-mark" aria-hidden="true">b.</span>BobaOps</div>
+    <p class="login-eyebrow">CỬA HÀNG CỦA BẠN</p>
+    <h1>Chào mừng trở lại</h1>
+    <p class="hint">Đăng nhập để quản lý doanh số và tồn kho.</p>
+    <form id="login-form">
+      <label for="username">Tên đăng nhập</label>
+      <input id="username" name="username" autocomplete="username" maxlength="100" required>
+      <label for="password">Mật khẩu</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" maxlength="1024" required>
+      <button id="login-submit" type="submit" disabled>Đăng nhập</button>
+    </form>
+    <p id="login-status" role="status" aria-live="polite">Đang kết nối…</p>
+  </main>
+</body>
+</html>

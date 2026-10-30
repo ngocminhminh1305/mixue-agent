@@ -193,9 +193,42 @@ The confirmed menu and synthetic carton purchase data can be imported together w
 Receipt names use exact matching followed by local character TF-IDF/cosine ranking, with guarded automatic choices and manual suggestions. See [product matching](docs/product-matching.md).
 
 
+## Private login
+
+All shop pages and APIs require one private account. There is no public registration.
+Run these commands from the project folder with the project's virtual environment active:
+
+```sh
+python3 -m pip install -r requirements.txt
+docker compose up -d db
+python3 -m alembic upgrade head
+python3 -m scripts.setup_login
+python3 -m uvicorn app:app --host 127.0.0.1 --port 8000 --reload
+```
+
+The setup command prompts for a username and a password of at least 12 characters.
+It writes an Argon2id password hash and a random session secret into the ignored `.env`;
+the password is hidden while typing and is never saved as plaintext. Open `/login`
+and sign in. Re-run the setup command to change a forgotten password; this invalidates
+existing sessions. Restart the server after changing settings. Missing login settings
+leave the app locked and show the setup instruction.
+
+Sessions expire after eight hours by default. PostgreSQL stores hashed session IDs
+and logout revokes them, including copied cookies. It also enforces five login attempts
+per client address in 15 minutes. Data changes require a session-bound CSRF token,
+which the frontend sends automatically. These login tables require PostgreSQL even
+when using the legacy JSON shop-storage mode. Account credentials live in `.env`,
+not in the shop catalog or product tables.
+
+For deployment behind HTTPS, set `AUTH_COOKIE_SECURE=true` and
+`AUTH_ALLOWED_ORIGIN=https://your-app-host` with the exact public origin. Keep
+`AUTH_SESSION_SECRET` private and identical across app workers. Configure the trusted
+reverse proxy correctly so the app sees the client address for login limits. Public
+hosting and database migration are separate work that has not been deployed yet.
+
 ## Project layout
 
-- `bobaops/`: backend package, grouped into catalog, extraction, sales, inventory, analytics and assistant features.
+- `bobaops/`: backend package, grouped into auth, catalog, extraction, sales, inventory, analytics and assistant features.
 - `bobaops/core/`: shared database configuration and project paths.
 - `scripts/`: administrative imports, run with `python3 -m scripts.<name>`.
 - `frontend/`: HTML, CSS and JavaScript.

@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import httpx
 from fastapi.testclient import TestClient
+from auth_support import authenticated_client
 
 import app
 from bobaops.assistant import routes as assistant
@@ -20,7 +21,7 @@ def reply(content=None, calls=None, finish='stop'):
 
 class AssistantTests(unittest.TestCase):
     def setUp(self):
-        self.client = TestClient(app.app)
+        self.client = authenticated_client(self, app.app)
         self.env = patch('bobaops.assistant.routes.environment', return_value={
             'OPENROUTER_API_KEY': 'test-secret', 'OPENROUTER_MODEL': 'openrouter/free'})
         self.env.start()

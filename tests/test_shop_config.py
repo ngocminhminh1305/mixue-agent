@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+from auth_support import authenticated_client
 
 import app
 from bobaops.catalog import routes as shop_config
@@ -29,7 +30,7 @@ class ShopConfigTests(unittest.TestCase):
         self.patch.start()
         self.backend_patch = patch('bobaops.catalog.routes.storage_backend', return_value='json')
         self.backend_patch.start()
-        self.client = TestClient(app.app)
+        self.client = authenticated_client(self, app.app)
 
     def tearDown(self):
         self.patch.stop()
