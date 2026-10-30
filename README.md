@@ -189,3 +189,5 @@ Record daily ice-cream powder totals in Inventory, including powders in discarde
 ## Confirmed catalog and demo stock
 
 The confirmed menu and synthetic carton purchase data can be imported together with historical records preserved. See [catalog import and verification](docs/confirmed-catalog.md). Purchases and stock in the demo dataset are invented examples.
+
+Receipt names use exact matching followed by local character TF-IDF/cosine ranking, with guarded automatic choices and manual suggestions. See [product matching](docs/product-matching.md).

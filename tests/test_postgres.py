@@ -1078,5 +1078,56 @@ class PostgresTests(unittest.TestCase):
         self.assertTrue(recipes)
 
 
+    def test_nlp_upload_suggestions_manual_review_and_approval(self):
+        self.config.stock_items[0].opening_stock = 5000
+        product = self.config.products[0]
+        product.name = 'Dương Chi Cam Lộ'
+        product.size = 'M'
+        for identifier, name in [('pure','Super Sundae O-coco Matcha (Kem Matcha)'),
+                                 ('mix','Super Sundae O-coco Matcha (Kem Mix)')]:
+            clone = product.model_copy(deep=True)
+            clone.id = identifier
+            clone.name = name
+            clone.category = 'sundae'
+            clone.size = None
+            self.config.products.append(clone)
+        write_config(self.config, initial_import=True)
+        image = io.BytesIO()
+        Image.new('RGB',(4,4),'orange').save(image,format='PNG')
+        report = {'date':'2026-10-30','issues':[], 'items':[
+            {'item_name':'Dương Chỉ Cam Lộ (MT)','quantity':3,'issues':[]},
+            {'item_name':'Super Sundae O-coco Matcha (MT)','quantity':2,'issues':[]}]}
+        response = self.client.post('/api/sales/drafts',data={'report':json.dumps(report),'report_date':'2026-10-30'},
+            files={'image':('nlp.png',image.getvalue(),'image/png')})
+        self.assertEqual(response.status_code,201,response.text)
+        draft = response.json()
+        first, second = draft['items']
+        self.assertEqual(first['product_id'],'drink')
+        self.assertEqual(first['raw_item_name'],'Dương Chỉ Cam Lộ (MT)')
+        self.assertEqual(first['matching']['method'],'approximate')
+        self.assertIsNone(second['product_id'])
+        self.assertEqual({x['product_id'] for x in second['matching']['suggestions']},{'pure','mix'})
+        self.assertEqual(self.scalar("SELECT count(*) FROM inventory_movements WHERE kind='sale'"),0)
+        preview = self.consumption_preview(draft)
+        self.assertFalse(preview['can_approve'])
+        # A reviewed manual choice is preserved by subsequent rematching.
+        body = {'revision':draft['revision'],'date':'2026-10-30','items':[
+            {k:r[k] for k in ('id','raw_item_name','product_id','quantity')} for r in draft['items']]}
+        body['items'][1]['product_id']='mix'
+        response = self.client.put('/api/sales/reports/'+draft['id'],json=body)
+        self.assertEqual(response.status_code,200,response.text)
+        saved = response.json()
+        rematched = self.client.post('/api/sales/reports/'+draft['id']+'/match',json={'revision':saved['revision']})
+        self.assertEqual(rematched.status_code,200,rematched.text)
+        self.assertEqual(rematched.json()['items'][1]['product_id'],'mix')
+        preview = self.consumption_preview(rematched.json())
+        self.assertTrue(preview['can_approve'],preview)
+        approved = self.client.post('/api/sales/reports/'+draft['id']+'/approve',json=self.approval_body(preview))
+        self.assertEqual(approved.status_code,200,approved.text)
+        self.assertEqual(approved.json()['report']['items'][0]['raw_item_name'],'Dương Chỉ Cam Lộ (MT)')
+        self.assertIsNone(approved.json()['report']['items'][0]['matching'])
+
+
+
 if __name__ == '__main__':
     unittest.main()

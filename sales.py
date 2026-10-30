@@ -83,8 +83,19 @@ def name_and_size(value):
     return text[:match.start()].strip(), next(x for x in match.groups() if x).upper()
 
 
+class MatchingIndex(defaultdict):
+    def similarity(self):
+        from product_similarity import cached_matcher
+        products = tuple(sorted((p['id'], p['name'], name_and_size(p['name'])[0],
+                                 p.get('size') or name_and_size(p['name'])[1] or '') for p in self.products))
+        surfaces = tuple(sorted((name, owner) for (name, size), owners in self.items() if size is None for owner in owners))
+        return cached_matcher(products, surfaces)
+
+
 def matching_index(products, aliases):
-    result = defaultdict(set)
+    products = list(products)
+    result = MatchingIndex(set)
+    result.products = products
     sizes = {}
     for product in products:
         base, label_size = name_and_size(product['name'])
@@ -128,6 +139,21 @@ def match_product(name, index, available=None):
         return None
     identifier = next(iter(candidates))
     return identifier if available is None or identifier in available else None
+
+
+def resolve_product(name, index, available):
+    """Exact rules win. Fuzzy scores never override exact ambiguity/unavailability."""
+    exact = match_product(name, index, available)
+    if exact is not None:
+        return {'product_id': exact, 'method': 'exact', 'score': 1.0, 'margin': None, 'suggestions': []}
+    base, size = name_and_size(name)
+    if index.get((base, None)) or index.get((base, size)):
+        return {'product_id': None, 'method': 'unmatched', 'score': None, 'margin': None, 'suggestions': []}
+    if size is None and re.search(r'\b(?:size|slze|s1ze)\b', base):
+        # An unreadable size must not silently fall back to an unlabelled M.
+        return {'product_id': None, 'method': 'unmatched', 'score': None, 'margin': None, 'suggestions': []}
+    from product_similarity import approximate
+    return approximate(base, size, index, available)
 
 
 def matcher(conn, t):
@@ -205,6 +231,7 @@ def details(conn, t, identifier):
         products = list({r['product_id']: {'id': r['product_id'], 'name': r['product_name']}
                          for r in approval['rows']}.values())
     warnings = row_warnings(rows, {p['id'] for p in products})
+    matches, available = matcher(conn, t) if report['status'] == 'draft' else (None, None)
     images = []
     for row in conn.execute(select(t['sales_images']).where(t['sales_images'].c.report_id == identifier)
                             .order_by(t['sales_images'].c.created_at, t['sales_images'].c.id)).mappings():
@@ -219,7 +246,8 @@ def details(conn, t, identifier):
             'issues': report['issues'], 'images': images, 'products': [dict(p) for p in products],
             'items': [{'id': r['id'], 'raw_item_name': r['raw_item_name'], 'product_id': r['product_id'],
                        'quantity': r['quantity'], 'source_image_id': r['source_image_id'],
-                       'extraction_issues': r['issues'], 'issues': warnings[r['id']]} for r in rows]}
+                       'extraction_issues': r['issues'], 'issues': warnings[r['id']],
+                       'matching': resolve_product(r['raw_item_name'], matches, available) if matches is not None else None} for r in rows]}
 
 
 def save_extraction(extraction, data, extension, report_date):
@@ -251,7 +279,7 @@ def save_extraction(extraction, data, extension, report_date):
             conn.execute(insert(t['sales_images']).values(id=image_id, report_id=identifier,
                          content_sha256=digest, source_path=written.name, extraction=extraction.model_dump(mode='json')))
             for index, item in enumerate(extraction.items):
-                product_id = match_product(item.item_name, matches, available)
+                product_id = resolve_product(item.item_name, matches, available)['product_id']
                 conn.execute(insert(t['sales_items']).values(id=f'{image_id}_{index:04d}', report_id=identifier,
                              source_image_id=image_id, raw_item_name=item.item_name or '', product_id=product_id,
                              quantity=item.quantity, issues=item.issues))
@@ -317,7 +345,7 @@ def match_draft(identifier: str, edit: MatchDraft):
                             t['sales_items'].c.product_id.is_(None))).mappings().all()
         count = 0
         for row in rows:
-            product_id = match_product(row['raw_item_name'], index, available)
+            product_id = resolve_product(row['raw_item_name'], index, available)['product_id']
             if product_id is not None:
                 conn.execute(update(t['sales_items']).where(t['sales_items'].c.id == row['id']).values(product_id=product_id))
                 count += 1

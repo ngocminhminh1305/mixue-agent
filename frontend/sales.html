@@ -51,7 +51,7 @@ function render(){
  for(const issue of draft.issues||[]){const p=el('p',issue);p.className='notice';$('report-issues').append(p)}
  if(!draft.items.length){const p=el('p','This draft has no rows. Add a row or save another photo for this date.');p.className='notice';$('report-issues').append(p)}
  for(const row of draft.items){const tr=el('tr'),name=el('td'),product=el('td'),quantity=el('td'),actions=el('td');
-  const input=el('input');input.value=row.raw_item_name;input.setAttribute('aria-label','Receipt item name');input.oninput=()=>{row.raw_item_name=input.value;changed()};name.append(input);
+  const input=el('input');input.value=row.raw_item_name;input.setAttribute('aria-label','Receipt item name');input.oninput=()=>{row.raw_item_name=input.value;row.matching=null;changed()};name.append(input);
   const source=el('div',sourceNumber(row.source_image_id));source.className='source';name.append(source);
   for(const issue of row.issues||[]){const note=el('p',issue);note.className='issue';name.append(note)}
   if(row.extraction_issues?.length){const details=el('details'),summary=el('summary','Original extraction warnings');summary.className='source';details.append(summary);for(const issue of row.extraction_issues)details.append(el('p',issue));name.append(details)}
@@ -59,6 +59,12 @@ function render(){
   for(const p of draft.products){const option=el('option',p.name);option.value=p.id;select.append(option)}
   if(row.product_id&&!draft.products.some(x=>x.id===row.product_id)){const option=el('option','Unavailable product — choose another');option.value=row.product_id;select.append(option)}
   select.value=row.product_id||'';select.onchange=()=>{row.product_id=select.value||null;changed()};product.append(select);
+  const matching=row.matching;
+  if(matching?.method==='approximate'&&matching.product_id===row.product_id){const note=el('p','Approximate name match — compare with the receipt.');note.className='source';product.append(note)}
+  if(!row.product_id&&draft.status==='draft'&&matching?.suggestions?.length){
+   const hint=el('p','Possible matches — choose after checking the receipt:');hint.className='source';product.append(hint);
+   for(const suggestion of matching.suggestions){const button=el('button',suggestion.name+' · similarity '+Math.round(suggestion.score*100)+'/100');button.type='button';button.className='secondary';button.style.margin='4px 4px 4px 0';button.onclick=()=>{if(row.matching!==matching){feedback('Save the corrected receipt name to refresh suggestions.',true);return}row.product_id=suggestion.product_id;changed();render()};product.append(button)}
+  }
   const qty=el('input');qty.type='number';qty.min='0';qty.max='2147483647';qty.step='1';qty.value=row.quantity??'';qty.setAttribute('aria-label','Sold quantity');qty.oninput=()=>{row.quantity=qty.value===''?null:Number(qty.value);changed()};quantity.append(qty);
   const remove=el('button','Remove');remove.className='remove';remove.onclick=()=>{draft.items=draft.items.filter(x=>x!==row);changed();render()};actions.append(remove);tr.append(name,product,quantity,actions);$('rows').append(tr);
  }
