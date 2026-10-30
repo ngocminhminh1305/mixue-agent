@@ -2,9 +2,9 @@
 import copy
 import unittest
 
-from import_confirmed_catalog import compile_catalog
-from sales import match_product, matching_index
-from shop_config import ShopConfig, check_config
+from scripts.import_confirmed_catalog import compile_catalog
+from bobaops.sales.routes import match_product, matching_index
+from bobaops.catalog.schemas import ShopConfig, check_config
 
 
 def fixture():

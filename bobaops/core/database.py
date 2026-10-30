@@ -1,12 +1,11 @@
 """Database configuration; credentials are never logged or placed in command arguments."""
 import os
 from functools import lru_cache
-from pathlib import Path
+from bobaops.core.paths import ROOT
 
 from dotenv import dotenv_values
 from sqlalchemy import MetaData, URL, create_engine
 
-ROOT = Path(__file__).resolve().parent
 
 
 def environment():

@@ -14,9 +14,9 @@ from PIL import Image
 
 import app
 
-from database import database_url
-from catalog_repository import StaleRevision, read_config, write_config
-from shop_config import ShopConfig, StockItem
+from bobaops.core.database import database_url
+from bobaops.catalog.repository import StaleRevision, read_config, write_config
+from bobaops.catalog.schemas import ShopConfig, StockItem
 from test_shop_config import sample
 
 
@@ -43,17 +43,17 @@ class PostgresTests(unittest.TestCase):
                         conn.exec_driver_sql(statement)
         metadata = MetaData()
         metadata.reflect(bind=self.engine)
-        for module in ('catalog_repository', 'sales', 'inventory_api', 'import_confirmed_catalog'):
+        for module in ('bobaops.catalog.repository', 'bobaops.sales.routes', 'bobaops.inventory.routes', 'scripts.import_confirmed_catalog'):
             for name, value in [('get_engine', self.engine), ('get_tables', metadata.tables)]:
                 mocked = patch(module + '.' + name, return_value=value)
                 mocked.start()
                 self.addCleanup(mocked.stop)
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
-        mocked = patch('sales.IMAGE_DIR', Path(temp.name))
+        mocked = patch('bobaops.sales.routes.IMAGE_DIR', Path(temp.name))
         mocked.start()
         self.addCleanup(mocked.stop)
-        for name in ('sales.storage_backend', 'inventory_api.storage_backend'):
+        for name in ('bobaops.sales.routes.storage_backend', 'bobaops.inventory.routes.storage_backend'):
             mocked = patch(name, return_value='postgres')
             mocked.start()
             self.addCleanup(mocked.stop)
@@ -185,10 +185,10 @@ class PostgresTests(unittest.TestCase):
         self.assertEqual(self.post_photo(color='green').status_code, 409)
 
     def test_failed_save_rolls_back_database_and_removes_new_photo(self):
-        import sales
+        from bobaops.sales import routes as sales
         from sqlalchemy.exc import SQLAlchemyError
         write_config(self.config, initial_import=True)
-        with patch('sales.details', side_effect=SQLAlchemyError('simulated failure')):
+        with patch('bobaops.sales.routes.details', side_effect=SQLAlchemyError('simulated failure')):
             self.assertEqual(self.post_photo().status_code, 503)
         self.assertEqual(self.scalar('SELECT count(*) FROM sales_reports'), 0)
         self.assertEqual(self.scalar('SELECT count(*) FROM sales_images'), 0)
@@ -204,7 +204,7 @@ class PostgresTests(unittest.TestCase):
         self.assertEqual(self.scalar('SELECT count(*) FROM sales_items'), 2)
 
     def test_delete_draft_removes_only_its_rows_photos_and_allows_reupload(self):
-        import sales
+        from bobaops.sales import routes as sales
         write_config(self.config, initial_import=True)
         first = self.post_photo().json()
         other = self.post_photo(color='blue', day='2026-10-23').json()
@@ -335,7 +335,7 @@ class PostgresTests(unittest.TestCase):
         write_config(self.config, initial_import=True)
         draft = self.post_photo().json()
         preview = self.consumption_preview(draft)
-        with patch('sales.details', side_effect=SQLAlchemyError('simulated failure after movement writes')):
+        with patch('bobaops.sales.routes.details', side_effect=SQLAlchemyError('simulated failure after movement writes')):
             result = self.client.post('/api/sales/reports/' + draft['id'] + '/approve', json=self.approval_body(preview))
         self.assertEqual(result.status_code, 503)
         self.assertEqual(self.scalar('SELECT count(*) FROM inventory_movements'), 0)
@@ -575,7 +575,7 @@ class PostgresTests(unittest.TestCase):
 
 
     def test_assistant_reads_current_stock_and_recipes_without_writes(self):
-        import assistant
+        from bobaops.assistant import routes as assistant
         self.config.stock_items[0].opening_stock = 1000
         write_config(self.config, initial_import=True)
         before = self.scalar('SELECT count(*) FROM inventory_movements')
@@ -607,7 +607,7 @@ class PostgresTests(unittest.TestCase):
                 'arguments': json.dumps({'date_from': '2026-10-22', 'date_to': '2026-10-22', 'view': 'summary'})}}
         responses = [httpx.Response(200, json={'choices': [{'message': {'role': 'assistant', 'content': None, 'tool_calls': [call]}}]}),
                      httpx.Response(200, json={'choices': [{'message': {'role': 'assistant', 'content': 'Ngày 22/10/2026 bán 3 đồ uống, ước tính 75.000 VND.'}}]})]
-        with patch('assistant.settings', return_value=('fake-test-key', 'openrouter/free')), patch('httpx.AsyncClient.post', side_effect=responses) as post:
+        with patch('bobaops.assistant.routes.settings', return_value=('fake-test-key', 'openrouter/free')), patch('httpx.AsyncClient.post', side_effect=responses) as post:
             response = self.client.post('/api/assistant/chat', json={'message': 'Doanh số ngày 22/10/2026?'})
         self.assertEqual(response.status_code, 200, response.text)
         data = response.json()
@@ -704,7 +704,7 @@ class PostgresTests(unittest.TestCase):
         from sqlalchemy.exc import SQLAlchemyError
         _, report = self.approved_for_reversal()
         body = self.reversal_body(report)
-        with patch('reversals.details', side_effect=SQLAlchemyError('Failure after all writes')):
+        with patch('bobaops.sales.reversals.details', side_effect=SQLAlchemyError('Failure after all writes')):
             response = self.client.post('/api/sales/reports/' + report['id'] + '/reverse', json=body)
         self.assertEqual(response.status_code, 503, response.text)
         self.assertEqual(self.scalar("SELECT count(*) FROM inventory_movements WHERE kind='reversal'"), 0)
@@ -841,7 +841,7 @@ class PostgresTests(unittest.TestCase):
 
 
     def ice_cream_fixture(self, manual=True):
-        from shop_config import Component
+        from bobaops.catalog.schemas import Component
         self.config.stock_items[0].ice_cream_powder = True
         self.config.stock_items[0].opening_stock = 5000
         self.config.stock_items[1].name = 'Kem'
@@ -907,7 +907,7 @@ class PostgresTests(unittest.TestCase):
         self.assertEqual(self.scalar('SELECT quantity FROM ice_cream_daily_usage'), 1500)
 
     def test_ice_cream_shared_powder_is_still_automatic_in_drinks(self):
-        from shop_config import Component, Preparation
+        from bobaops.catalog.schemas import Component, Preparation
         saved = self.ice_cream_fixture()
         saved.stock_items.append(StockItem(id='concentrate', name='Drink concentrate', unit='ml', kind='prepared'))
         saved.preparations.append(Preparation(id='drink-prep', name='Prepare drink concentrate', output_item_id='concentrate',
@@ -1005,7 +1005,7 @@ class PostgresTests(unittest.TestCase):
 
     def test_confirmed_catalog_import_is_atomic_retry_safe_and_preserves_history(self):
         from test_catalog_import import fixture
-        from import_confirmed_catalog import compile_catalog, apply_catalog
+        from scripts.import_confirmed_catalog import compile_catalog, apply_catalog
         self.config.stock_items[0].opening_stock = 5000
         write_config(self.config, initial_import=True)
         draft = self.post_photo().json()
@@ -1040,7 +1040,7 @@ class PostgresTests(unittest.TestCase):
 
     def test_imported_menu_full_receipt_flow_and_manual_powders(self):
         from test_catalog_import import fixture, empty
-        from import_confirmed_catalog import compile_catalog, apply_catalog
+        from scripts.import_confirmed_catalog import compile_catalog, apply_catalog
         plan = compile_catalog(fixture(), empty())
         apply_catalog(plan)
         config = read_config()
@@ -1073,7 +1073,7 @@ class PostgresTests(unittest.TestCase):
         dashboard = self.client.get('/api/analytics/dashboard?date_from=2026-10-30&date_to=2026-10-30')
         self.assertEqual(dashboard.status_code,200,dashboard.text)
         self.assertEqual(dashboard.json()['summary']['approved_reports'],1)
-        import assistant
+        from bobaops.assistant import routes as assistant
         recipes = assistant.lookup('read_recipes',assistant.SearchArgs(search='Kem Ốc Quế',limit=10))
         self.assertTrue(recipes)
 
@@ -1127,6 +1127,74 @@ class PostgresTests(unittest.TestCase):
         self.assertEqual(approved.json()['report']['items'][0]['raw_item_name'],'Dương Chỉ Cam Lộ (MT)')
         self.assertIsNone(approved.json()['report']['items'][0]['matching'])
 
+
+
+    def test_receipt_and_daily_powders_commit_atomically_using_receipt_date(self):
+        self.ice_cream_fixture()
+        def send(body, color='red', day='2026-10-22'):
+            image=io.BytesIO()
+            Image.new('RGB',(4,4),color).save(image,format='PNG')
+            report={'date':day,'issues':[],'items':[{'item_name':'Tea M','quantity':1,'issues':[]}]}
+            return self.client.post('/api/sales/drafts',data={'report':json.dumps(report),'report_date':day,'powder_usage':json.dumps(body)},
+                                    files={'image':('receipt.png',image.getvalue(),'image/png')})
+        stale=self.ice_cream_body('1500')
+        stale['items'][0]['usage_token']='0'*64
+        response=send(stale)
+        self.assertEqual(response.status_code,409,response.text)
+        self.assertEqual(self.scalar('SELECT count(*) FROM sales_reports'),0)
+        self.assertEqual(self.scalar('SELECT count(*) FROM ice_cream_daily_usage'),0)
+        self.assertEqual(self.stock_state()['quantity'],'5000.000000')
+        from bobaops.sales import routes as sales
+        self.assertEqual(list(sales.IMAGE_DIR.glob('*')),[])
+        valid=self.ice_cream_body('1500')
+        response=send(valid)
+        self.assertEqual(response.status_code,201,response.text)
+        self.assertEqual(self.stock_state()['quantity'],'3500.000000')
+        self.assertEqual(send(valid).status_code,409)
+        self.assertEqual(self.stock_state()['quantity'],'3500.000000')
+        same=send(self.ice_cream_body('1500'),color='blue')
+        self.assertEqual(same.status_code,201,same.text)
+        self.assertEqual(self.stock_state()['quantity'],'3500.000000')
+        changed=send(self.ice_cream_body('2000'),color='green')
+        self.assertEqual(changed.status_code,201,changed.text)
+        self.assertEqual(self.stock_state()['quantity'],'3000.000000')
+        self.assertEqual(self.scalar('SELECT count(*) FROM sales_images'),3)
+        mismatch=send(self.ice_cream_body('10',day='2026-10-23'),color='black')
+        self.assertEqual(mismatch.status_code,422,mismatch.text)
+        self.assertEqual(self.scalar('SELECT count(*) FROM sales_images'),3)
+        self.assertEqual(self.scalar("SELECT count(*) FROM inventory_movements WHERE kind='ice_cream_usage'"),2)
+
+    def test_inventory_history_filters_purchase_date_count_waste_and_thresholds(self):
+        self.config.stock_items[0].opening_stock=1000
+        write_config(self.config,initial_import=True)
+        purchase={'request_id':str(uuid4()),'purchased_on':'2026-05-07','note':'Backdated purchase',
+                  'items':[{'item_id':'powder','quantity':'100','total_cost_vnd':1000}]}
+        self.assertEqual(self.client.post('/api/inventory/purchases',json=purchase).status_code,201)
+        count=self.stock_entry(actual_quantity='1100')
+        self.assertEqual(self.client.post('/api/inventory/counts/batch',json={'request_id':str(uuid4()),'items':[
+            {k:v for k,v in count.items() if k!='request_id'}]}).status_code,201)
+        self.assertEqual(self.client.post('/api/inventory/waste',json=self.stock_entry(kind='waste',quantity='10')).status_code,201)
+        self.assertEqual(self.client.post('/api/inventory/thresholds',json=self.stock_entry(kind='threshold',threshold='100')).status_code,200)
+        self.assertEqual(self.client.post('/api/inventory/thresholds',json=self.stock_entry(kind='threshold',threshold=None)).status_code,200)
+        with self.engine.begin() as conn:
+            conn.execute(text("UPDATE inventory_operations SET created_at='2026-10-22T16:30:00Z'"))
+            conn.execute(text("UPDATE inventory_movements SET occurred_at='2026-10-22T16:30:00Z'"))
+            conn.execute(text("UPDATE stock_counts SET counted_at='2026-10-22T16:30:00Z'"))
+        purchase_history=self.client.get('/api/inventory/history?date_from=2026-05-07&date_to=2026-05-07&kind=purchase&item_id=powder')
+        self.assertEqual(purchase_history.status_code,200,purchase_history.text)
+        self.assertEqual(len(purchase_history.json()['updates']),1)
+        self.assertEqual(purchase_history.json()['updates'][0]['value'],'100.000000')
+        count_history=self.client.get('/api/inventory/history?date_from=2026-10-23&date_to=2026-10-23&kind=count')
+        self.assertEqual(count_history.status_code,200,count_history.text)
+        self.assertEqual({r['kind'] for r in count_history.json()['updates']},{'count','waste'})
+        self.assertEqual(len(count_history.json()['updates']),2) # Parent batch is not counted twice.
+        threshold_history=self.client.get('/api/inventory/history?date_from=2026-10-23&date_to=2026-10-23&kind=threshold')
+        self.assertEqual(threshold_history.status_code,200,threshold_history.text)
+        self.assertEqual(len(threshold_history.json()['updates']),2)
+        self.assertEqual({r['value'] for r in threshold_history.json()['updates']},{'100.000000',None})
+        self.assertEqual(threshold_history.json()['movements'],[])
+        self.assertEqual(self.client.get('/api/inventory/history?date_from=2026-10-24&date_to=2026-10-23').status_code,400)
+        self.assertEqual(self.client.get('/api/inventory/history?kind=invalid').status_code,422)
 
 
 if __name__ == '__main__':

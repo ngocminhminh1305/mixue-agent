@@ -2,7 +2,7 @@ import unittest
 
 from pydantic import ValidationError
 
-from sales import DraftEdit, Extraction, match_product, matching_index, name_and_size, normalized_name, row_warnings
+from bobaops.sales.routes import DraftEdit, Extraction, match_product, matching_index, name_and_size, normalized_name, row_warnings
 
 
 class SalesValidationTests(unittest.TestCase):

@@ -4,7 +4,7 @@ from uuid import uuid4
 
 from pydantic import ValidationError
 
-from reversals import ReverseReport
+from bobaops.sales.reversals import ReverseReport
 
 
 class ReversalValidationTests(unittest.TestCase):

@@ -7,7 +7,7 @@ from pydantic import Field
 from sqlalchemy import insert, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from inventory_api import (BatchRequest, ItemFields, LIMIT, TOKEN_PATTERN, checked_balance,
+from bobaops.inventory.routes import (BatchRequest, ItemFields, LIMIT, TOKEN_PATTERN, checked_balance,
                            checked_stock, connection, execute_operation, fingerprint, formatted, stock_states)
 
 router = APIRouter(prefix='/api/inventory/ice-cream-usage')
@@ -85,40 +85,42 @@ def get_daily_usage(used_on: date):
                 'legacy_automatic_sales': approved_automatic_usage(conn, t, used_on)}
 
 
-@router.post('')
-def save_daily_usage(body: UsageRequest):
+def apply_daily_usage(conn, t, identifier, body):
     if not body.note.strip():
         raise HTTPException(422, 'Enter a note for the daily powder usage or correction.')
-    def apply(conn, t, identifier):
-        require_schema(t)
-        ids = [r.item_id for r in body.items]
-        stocks = checked_stock(conn, t, ids)
-        if any(not s['ice_cream_powder'] or s['unit'] != 'g' for s in stocks.values()):
-            raise HTTPException(400, 'Choose only raw powders flagged for ice-cream usage in Shop setup.')
-        if any(r.total_used > 0 for r in body.items) and approved_automatic_usage(conn, t, body.used_on):
-            raise HTTPException(409, 'This date already has an approved report with automatic ice-cream deductions. Reverse it and approve a correction with manual ice cream before entering actual powders.')
-        before = {r['id']: r for r in daily_rows(conn, t, body.used_on, ids)}
-        now = datetime.now(timezone.utc)
-        changes = []
-        for line in body.items:
-            previous = before[line.item_id]
-            if line.balance_token != previous['balance_token'] or line.usage_token != previous['usage_token']:
-                raise HTTPException(409, 'Stock or this date\'s powder total changed. Reload the powder table before saving. Nothing in this save was committed.')
-            old_total = Decimal(previous['total_used'])
-            delta = old_total - line.total_used
-            checked_balance(delta)
-            checked_balance(Decimal(previous['ledger_estimate']) + delta)
-            if delta:
-                conn.execute(insert(t['inventory_movements']).values(id=identifier + ':' + str(len(changes)),
-                    item_id=line.item_id, kind='ice_cream_usage', signed_quantity=delta, occurred_at=now,
-                    note=f'Ice cream {body.used_on}: daily total {formatted(old_total)} → {formatted(line.total_used)} g. {body.note.strip()}'))
-            table = t['ice_cream_daily_usage']
-            conn.execute(pg_insert(table).values(used_on=body.used_on, item_id=line.item_id,
-                         quantity=line.total_used, operation_id=identifier, updated_at=now)
-                         .on_conflict_do_update(index_elements=[table.c.used_on, table.c.item_id],
-                         set_={'quantity': line.total_used, 'operation_id': identifier, 'updated_at': now}))
-            changes.append({'item_id': line.item_id, 'before': formatted(old_total),
-                            'after': formatted(line.total_used), 'stock_change': formatted(delta)})
-        return {'used_on': body.used_on.isoformat(), 'items': daily_rows(conn, t, body.used_on, ids),
-                'changes': changes, 'note': body.note.strip()}
-    return execute_operation('ice_cream_usage', body, apply)
+    require_schema(t)
+    ids = [r.item_id for r in body.items]
+    stocks = checked_stock(conn, t, ids)
+    if any(not s['ice_cream_powder'] or s['unit'] != 'g' for s in stocks.values()):
+        raise HTTPException(400, 'Choose only raw powders flagged for ice-cream usage in Shop setup.')
+    if any(r.total_used > 0 for r in body.items) and approved_automatic_usage(conn, t, body.used_on):
+        raise HTTPException(409, 'This date already has an approved report with automatic ice-cream deductions. Reverse it and approve a correction with manual ice cream before entering actual powders.')
+    before = {r['id']: r for r in daily_rows(conn, t, body.used_on, ids)}
+    now = datetime.now(timezone.utc)
+    changes = []
+    for line in body.items:
+        previous = before[line.item_id]
+        if line.balance_token != previous['balance_token'] or line.usage_token != previous['usage_token']:
+            raise HTTPException(409, 'Stock or this date\'s powder total changed. Reload the powder table before saving. Nothing in this save was committed.')
+        old_total = Decimal(previous['total_used'])
+        delta = old_total - line.total_used
+        checked_balance(delta)
+        checked_balance(Decimal(previous['ledger_estimate']) + delta)
+        if delta:
+            conn.execute(insert(t['inventory_movements']).values(id=identifier + ':' + str(len(changes)),
+                item_id=line.item_id, kind='ice_cream_usage', signed_quantity=delta, occurred_at=now,
+                note=f'Ice cream {body.used_on}: daily total {formatted(old_total)} → {formatted(line.total_used)} g. {body.note.strip()}'))
+        table = t['ice_cream_daily_usage']
+        conn.execute(pg_insert(table).values(used_on=body.used_on, item_id=line.item_id,
+                     quantity=line.total_used, operation_id=identifier, updated_at=now)
+                     .on_conflict_do_update(index_elements=[table.c.used_on, table.c.item_id],
+                     set_={'quantity': line.total_used, 'operation_id': identifier, 'updated_at': now}))
+        changes.append({'item_id': line.item_id, 'before': formatted(old_total),
+                        'after': formatted(line.total_used), 'stock_change': formatted(delta)})
+    return {'used_on': body.used_on.isoformat(), 'items': daily_rows(conn, t, body.used_on, ids),
+            'changes': changes, 'note': body.note.strip()}
+
+
+@router.post('')
+def save_daily_usage(body: UsageRequest):
+    return execute_operation('ice_cream_usage', body, lambda conn, t, identifier: apply_daily_usage(conn, t, identifier, body))

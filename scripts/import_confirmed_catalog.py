@@ -14,11 +14,11 @@ from uuid import uuid4
 
 from sqlalchemy import insert, select, update
 
-from catalog_repository import read_config, write_config
-from database import ROOT, get_engine, get_tables
-from inventory_api import fingerprint, stock_states
-from sales import match_product, matching_index, normalized_name
-from shop_config import Component, Preparation, Product, ShopConfig, StockItem, check_config
+from bobaops.catalog.repository import read_config, write_config
+from bobaops.core.database import ROOT, get_engine, get_tables
+from bobaops.inventory.routes import fingerprint, stock_states
+from bobaops.sales.routes import match_product, matching_index, normalized_name
+from bobaops.catalog.schemas import Component, Preparation, Product, ShopConfig, StockItem, check_config
 
 
 def identity(kind, name):

@@ -166,7 +166,7 @@ def calculate_consumption(rows, products, stocks, recipes, components, preparati
 
 
 def build_preview(conn, tables, report, shop_revision):
-    from sales import row_warnings
+    from bobaops.sales.routes import row_warnings
 
     def records(name):
         table = tables[name]
@@ -209,7 +209,7 @@ def build_preview(conn, tables, report, shop_revision):
                 shop_revision=shop_revision, recipe_policy='Current catalog at approval', approved=False,
                 can_approve=not plan['blockers'])
     if 'ice_cream_daily_usage' in tables:
-        from ice_cream_usage import approval_conflict
+        from bobaops.inventory.powder_usage import approval_conflict
         conflict = approval_conflict(conn, tables, report['report_date'], [p for row in plan['rows'] for p in row['preparation_version_ids']])
         if conflict:
             plan['blockers'].append(conflict)

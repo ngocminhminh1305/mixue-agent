@@ -6,9 +6,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 import app
-import shop_config
-
-
+from bobaops.catalog import routes as shop_config
 def sample():
     return {
         'revision': 0,
@@ -27,9 +25,9 @@ def sample():
 class ShopConfigTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self.patch = patch('shop_config.STORE', Path(self.temp.name) / 'shop_config.json')
+        self.patch = patch('bobaops.catalog.routes.STORE', Path(self.temp.name) / 'bobaops.catalog.routes.json')
         self.patch.start()
-        self.backend_patch = patch('shop_config.storage_backend', return_value='json')
+        self.backend_patch = patch('bobaops.catalog.routes.storage_backend', return_value='json')
         self.backend_patch.start()
         self.client = TestClient(app.app)
 

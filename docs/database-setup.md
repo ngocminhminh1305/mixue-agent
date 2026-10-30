@@ -53,7 +53,7 @@ without touching your Mac pgAdmin app or deleting its volume.
 
 ```sh
 python3 -m alembic upgrade head
-python3 import_shop_config.py
+python3 -m scripts.import_shop_config
 ```
 
 Migrations are repeatable. Import runs only into an empty catalog and refuses

@@ -7,7 +7,7 @@ from collections import Counter, defaultdict
 from contextlib import contextmanager
 from datetime import date, datetime, timezone
 from decimal import Decimal
-from pathlib import Path
+from bobaops.core.paths import PRIVATE_DATA_DIR
 from uuid import uuid4
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
@@ -18,10 +18,10 @@ from sqlalchemy import delete, func, insert, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
-from database import get_engine, get_tables, storage_backend
+from bobaops.core.database import get_engine, get_tables, storage_backend
 
 router = APIRouter(prefix='/api/sales')
-IMAGE_DIR = Path(__file__).resolve().parent / 'data/private/sales_images'
+IMAGE_DIR = PRIVATE_DATA_DIR / 'sales_images'
 MAX_BYTES = 10 * 1024 * 1024
 
 
@@ -85,7 +85,7 @@ def name_and_size(value):
 
 class MatchingIndex(defaultdict):
     def similarity(self):
-        from product_similarity import cached_matcher
+        from bobaops.sales.similarity import cached_matcher
         products = tuple(sorted((p['id'], p['name'], name_and_size(p['name'])[0],
                                  p.get('size') or name_and_size(p['name'])[1] or '') for p in self.products))
         surfaces = tuple(sorted((name, owner) for (name, size), owners in self.items() if size is None for owner in owners))
@@ -152,7 +152,7 @@ def resolve_product(name, index, available):
     if size is None and re.search(r'\b(?:size|slze|s1ze)\b', base):
         # An unreadable size must not silently fall back to an unlabelled M.
         return {'product_id': None, 'method': 'unmatched', 'score': None, 'margin': None, 'suggestions': []}
-    from product_similarity import approximate
+    from bobaops.sales.similarity import approximate
     return approximate(base, size, index, available)
 
 
@@ -250,7 +250,9 @@ def details(conn, t, identifier):
                        'matching': resolve_product(r['raw_item_name'], matches, available) if matches is not None else None} for r in rows]}
 
 
-def save_extraction(extraction, data, extension, report_date):
+def save_extraction(extraction, data, extension, report_date, powder_usage=None):
+    if powder_usage is not None and powder_usage.used_on != report_date:
+        raise HTTPException(422, 'Ngày dùng bột phải trùng ngày trên hoá đơn.')
     digest = hashlib.sha256(data).hexdigest()
     written = None
     try:
@@ -283,6 +285,11 @@ def save_extraction(extraction, data, extension, report_date):
                 conn.execute(insert(t['sales_items']).values(id=f'{image_id}_{index:04d}', report_id=identifier,
                              source_image_id=image_id, raw_item_name=item.item_name or '', product_id=product_id,
                              quantity=item.quantity, issues=item.issues))
+            if powder_usage is not None:
+                from bobaops.inventory.powder_usage import apply_daily_usage
+                from bobaops.inventory.routes import execute_in_transaction
+                execute_in_transaction(conn, t, 'ice_cream_usage', powder_usage,
+                                       lambda c, tables, operation_id: apply_daily_usage(c, tables, operation_id, powder_usage))
             conn.execute(update(reports).where(reports.c.id == identifier).values(revision=report['revision'] + 1))
             result = details(conn, t, identifier)
         return result
@@ -293,9 +300,13 @@ def save_extraction(extraction, data, extension, report_date):
 
 
 @router.post('/drafts', status_code=201)
-async def create_draft(report: str = Form(...), report_date: date = Form(...), image: UploadFile = File(...)):
+async def create_draft(report: str = Form(...), report_date: date = Form(...), image: UploadFile = File(...),
+                       powder_usage: str | None = Form(default=None)):
     try:
         extraction = Extraction.model_validate_json(report)
+        if powder_usage is not None:
+            from bobaops.inventory.powder_usage import UsageRequest
+            powder_usage = UsageRequest.model_validate_json(powder_usage)
     except ValidationError:
         raise HTTPException(422, 'Check the report date, item names and whole-number quantities before saving.') from None
     try:
@@ -314,7 +325,7 @@ async def create_draft(report: str = Form(...), report_date: date = Form(...), i
         raise HTTPException(400, 'This file is not a readable image.') from None
     # File writes and synchronous SQL run off the async request event loop.
     from starlette.concurrency import run_in_threadpool
-    return await run_in_threadpool(save_extraction, extraction, data, extension, report_date)
+    return await run_in_threadpool(save_extraction, extraction, data, extension, report_date, powder_usage)
 
 
 @router.get('/reports')
@@ -392,7 +403,7 @@ def require_approval_schema(t):
 
 @router.get('/reports/{identifier}/consumption')
 def preview_consumption(identifier: str):
-    from inventory import build_preview
+    from bobaops.inventory.calculations import build_preview
     with connection() as (conn, t):
         require_approval_schema(t)
         report = conn.execute(select(t['sales_reports']).where(t['sales_reports'].c.id == identifier)
@@ -409,7 +420,7 @@ def preview_consumption(identifier: str):
 
 @router.post('/reports/{identifier}/approve')
 def approve_report(identifier: str, approval: ApproveDraft):
-    from inventory import build_preview
+    from bobaops.inventory.calculations import build_preview
     with connection() as (conn, t):
         require_approval_schema(t)
         report = locked_report(conn, t, identifier)

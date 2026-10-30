@@ -2,19 +2,21 @@
 import hashlib
 import json
 from contextlib import contextmanager
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
+from typing import Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from uuid import UUID, uuid4, uuid5
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from sqlalchemy import func, insert, select, update
+from sqlalchemy import func, insert, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
-from database import get_engine, get_tables, storage_backend
-from inventory import LIMIT, SCALE
+from bobaops.core.database import environment, get_engine, get_tables, storage_backend
+from bobaops.inventory.calculations import LIMIT, SCALE
 
 router = APIRouter(prefix='/api/inventory')
 TOKEN_PATTERN = r'^[a-f0-9]{64}$'
@@ -187,26 +189,29 @@ def checked_balance(value):
         raise HTTPException(400, 'The resulting balance or adjustment exceeds supported quantity limits.')
 
 
-def execute_operation(kind, body, apply):
+def execute_in_transaction(conn, t, kind, body, apply):
     payload = body.model_dump(mode='json', exclude={'request_id'})
     digest = fingerprint({'kind': kind, 'payload': payload})
     identifier = str(body.request_id)
-    with connection() as (conn, t):
-        # Same order as catalog edits / sales approvals: catalog, then stock IDs.
-        conn.execute(select(t['shop_state'].c.revision).where(t['shop_state'].c.id == 1).with_for_update(read=True)).all()
-        ops = t['inventory_operations']
-        created = conn.scalar(pg_insert(ops).values(id=identifier, kind=kind, request_hash=digest, payload=payload)
-                              .on_conflict_do_nothing(index_elements=[ops.c.id]).returning(ops.c.id))
-        if created is None:
-            previous = conn.execute(select(ops).where(ops.c.id == identifier)).mappings().one()
-            if previous['request_hash'] != digest:
-                raise HTTPException(409, 'This request ID was already used for different data. Refresh the form.')
-            return {**previous['result'], 'replayed': True}
-        result = jsonable_encoder(apply(conn, t, identifier))
-        result.update(operation_id=identifier, kind=kind, replayed=False)
-        conn.execute(update(ops).where(ops.c.id == identifier).values(result=result))
-        return result
+    # Same order as catalog edits / sales approvals: catalog, then stock IDs.
+    conn.execute(select(t['shop_state'].c.revision).where(t['shop_state'].c.id == 1).with_for_update(read=True)).all()
+    ops = t['inventory_operations']
+    created = conn.scalar(pg_insert(ops).values(id=identifier, kind=kind, request_hash=digest, payload=payload)
+                          .on_conflict_do_nothing(index_elements=[ops.c.id]).returning(ops.c.id))
+    if created is None:
+        previous = conn.execute(select(ops).where(ops.c.id == identifier)).mappings().one()
+        if previous['request_hash'] != digest:
+            raise HTTPException(409, 'This request ID was already used for different data. Refresh the form.')
+        return {**previous['result'], 'replayed': True}
+    result = jsonable_encoder(apply(conn, t, identifier))
+    result.update(operation_id=identifier, kind=kind, replayed=False)
+    conn.execute(update(ops).where(ops.c.id == identifier).values(result=result))
+    return result
 
+
+def execute_operation(kind, body, apply):
+    with connection() as (conn, t):
+        return execute_in_transaction(conn, t, kind, body, apply)
 
 @router.get('')
 def get_inventory():
@@ -321,7 +326,17 @@ def set_thresholds(body: ThresholdBatch):
 
 
 @router.get('/history')
-def get_history(item_id: str | None = Query(default=None, max_length=100)):
+def get_history(item_id: str | None = Query(default=None, max_length=100),
+                date_from: date | None = None, date_to: date | None = None,
+                kind: Literal['purchase', 'count', 'threshold'] | None = None):
+    if (date_from and date_to and date_from > date_to) or date_to == date.max:
+        raise HTTPException(400, 'Chọn khoảng ngày hợp lệ: từ ngày không được sau đến ngày.')
+    try:
+        zone = ZoneInfo(environment().get('SHOP_TIMEZONE') or 'Asia/Singapore')
+    except (ValueError, ZoneInfoNotFoundError):
+        raise HTTPException(503, 'SHOP_TIMEZONE không hợp lệ.') from None
+    start = datetime.combine(date_from, time.min, zone) if date_from else None
+    end = datetime.combine(date_to + timedelta(days=1), time.min, zone) if date_to else None
     with connection(read_only=True) as (conn, t):
         m, s, sale, purchase = t['inventory_movements'], t['stock_items'], t['sales_items'], t['purchase_items']
         original = m.alias('original_sale_movement')
@@ -335,6 +350,12 @@ def get_history(item_id: str | None = Query(default=None, max_length=100)):
                            .outerjoin(purchase, m.c.purchase_item_id == purchase.c.id))
         if item_id:
             query = query.where(m.c.item_id == item_id)
+        if start:
+            query = query.where(m.c.occurred_at >= start)
+        if end:
+            query = query.where(m.c.occurred_at < end)
+        if kind:
+            query = query.where(m.c.kind.in_({'purchase': ['purchase'], 'count': ['correction', 'waste'], 'threshold': []}[kind]))
         movements = []
         for row in conn.execute(query.order_by(m.c.occurred_at.desc(), m.c.id.desc()).limit(100)).mappings():
             movements.append({**dict(row), 'signed_quantity': formatted(row['signed_quantity'])})
@@ -346,9 +367,53 @@ def get_history(item_id: str | None = Query(default=None, max_length=100)):
             c.join(s, c.c.item_id == s.c.id).join(ops, c.c.id == ops.c.id))
         if item_id:
             counts_query = counts_query.where(c.c.item_id == item_id)
+        if start:
+            counts_query = counts_query.where(c.c.counted_at >= start)
+        if end:
+            counts_query = counts_query.where(c.c.counted_at < end)
+        if kind and kind != 'count':
+            counts_query = counts_query.where(False)
         counts = [{**{key: value for key, value in row.items() if key != 'entry'}, 'reason': row['entry'].get('reason', ''),
                    'counted_quantity': formatted(row['counted_quantity']),
                    'ledger_balance_before': formatted(row['ledger_balance_before']),
                    'adjustment_quantity': formatted(row['adjustment_quantity'])}
                   for row in conn.execute(counts_query.order_by(c.c.counted_at.desc(), c.c.id.desc()).limit(30)).mappings()]
-        return {'movements': movements, 'counts': counts}
+        # Operation history also includes warning-level edits and zero-delta
+        # counts, which intentionally do not create stock movements.
+        conditions = ["o.kind IN ('purchase','count','waste','threshold')",
+                      "NOT (o.kind = 'count' AND o.payload ? 'items')"]
+        params = {'zone': zone.key}
+        if item_id:
+            conditions.append("s.id = :item_id")
+            params['item_id'] = item_id
+        if kind:
+            conditions.append("o.kind IN ('count','waste')" if kind == 'count' else "o.kind = :kind")
+            params['kind'] = kind
+        day = "CASE WHEN o.kind='purchase' THEN COALESCE((o.payload->>'purchased_on')::date, timezone(:zone,o.created_at)::date) ELSE timezone(:zone,o.created_at)::date END"
+        if date_from:
+            conditions.append(day + ' >= :date_from')
+            params['date_from'] = date_from
+        if date_to:
+            conditions.append(day + ' <= :date_to')
+            params['date_to'] = date_to
+        statement = text("""SELECT o.id, o.kind, o.created_at AS occurred_at,
+            s.id AS item_id, s.name, s.unit, entry.value AS entry, o.payload,
+            """ + day + """ AS event_date
+            FROM inventory_operations o
+            CROSS JOIN LATERAL jsonb_array_elements(
+                CASE WHEN jsonb_typeof(o.payload->'items')='array'
+                     THEN o.payload->'items' ELSE jsonb_build_array(o.payload) END) entry(value)
+            JOIN stock_items s ON s.id=entry.value->>'item_id'
+            WHERE """ + ' AND '.join(conditions) + ' ORDER BY o.created_at DESC, o.id DESC, s.id LIMIT 100')
+        updates = []
+        for row in conn.execute(statement, params).mappings():
+            entry, payload = row['entry'], row['payload']
+            key = {'purchase':'quantity','count':'actual_quantity','waste':'quantity','threshold':'threshold'}[row['kind']]
+            # Catalog demo counts used the same audited operation shape.
+            value = entry.get(key)
+            updates.append({k: v for k, v in row.items() if k not in {'entry','payload'}} | {
+                'value': formatted(Decimal(str(value))) if value is not None else None,
+                'cost_vnd': entry.get('total_cost_vnd'),
+                'note': entry.get('reason') or payload.get('note') or ''})
+        return {'movements': movements, 'counts': counts, 'updates': updates,
+                'timezone': zone.key, 'date_basis': 'Nhập hàng: ngày mua. Kiểm đếm, hao hụt và mức nhắc: ngày ghi nhận.'}

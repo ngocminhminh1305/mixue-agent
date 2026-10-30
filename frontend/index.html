@@ -1,72 +1,81 @@
 <!doctype html>
-<html lang="en">
+<html lang="vi">
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>BobaOps · Sales extraction</title>
-  <style>
-    :root{font-family:system-ui,sans-serif;color:#192e29;background:#f5f7f3}*{box-sizing:border-box}body{margin:0}main{max-width:1180px;margin:auto;padding:40px 24px}header{margin-bottom:28px}.brand{font-size:13px;font-weight:750;letter-spacing:2px;color:#52735a}h1{font-size:34px;margin:12px 0}p{color:#64726a;line-height:1.6}.layout{display:grid;grid-template-columns:1fr 1.1fr;gap:24px}.card{background:white;border:1px solid #dfe6dc;border-radius:18px;padding:24px}h2{font-size:19px;margin:0 0 18px}input{width:100%;padding:18px;border:1px dashed #9bad96;border-radius:10px;background:#f8faf6}button,a.download{background:#245d40;color:white;border:0;border-radius:9px;padding:12px 18px;font:inherit;font-weight:600;cursor:pointer}button:disabled{opacity:.45;cursor:not-allowed}.actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:18px}#preview{max-width:100%;max-height:600px;object-fit:contain;margin-top:20px;border-radius:8px}#status{font-size:14px}#error{background:#fff0ee;color:#9a3324;padding:14px;border-radius:8px;margin-top:18px}.empty{padding:70px 15px;text-align:center;color:#788579}.meta{display:flex;justify-content:space-between;gap:10px;margin:20px 0;font-weight:650}table{border-collapse:collapse;width:100%;font-size:14px}td,th{text-align:left;padding:13px 8px;border-bottom:1px solid #e7ece4}th{color:#607366;font-size:12px}td:nth-child(2){width:80px}.warning{background:#fff8e4;color:#806121;padding:12px;border-radius:8px;margin:8px 0;font-size:14px}.row-issue{display:block;color:#986d16;font-size:12px;margin-top:5px}details{margin-top:22px}pre{white-space:pre-wrap;word-break:break-word;font-size:12px;background:#f5f7f3;padding:14px;border-radius:8px}.download{text-decoration:none;font-size:14px}#busy{color:#245d40;font-size:14px} [hidden]{display:none!important}@media(max-width:760px){.layout{grid-template-columns:1fr}main{padding:24px 16px}h1{font-size:28px}}
-  </style>
+  <title>Nhập doanh số · BobaOps</title>
+  <link rel="stylesheet" href="/assets/app.css"><script defer src="/assets/ui.js"></script>
 </head>
-<body><main>
-  <header><div class="brand">BOBAOPS AI</div><p><a href="/setup">Shop setup →</a> · <a href="/sales">Saved sales →</a> · <a href="/inventory">Inventory →</a> · <a href="/dashboard">Dashboard →</a> · <a href="/chat">Trợ lý AI</a></p><h1>Turn a sales photo into data.</h1><p>Upload your daily report and check its date, product names, and quantities.</p></header>
+<body><a class="skip-link" href="#main-content">Đến nội dung chính</a><aside class="app-nav"><a class="app-brand" href="/" aria-label="BobaOps — trang chủ"><span class="brand-mark" aria-hidden="true">b.</span>BobaOps</a><div class="nav-caption">CỬA HÀNG</div><nav class="app-links" aria-label="Điều hướng chính"><a class="app-link" href="/"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="11" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M14 18h7m-7 3h7"/></svg><span>Tổng quan</span></a><a class="app-link" href="/upload" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m-4 4 4-4 4 4M4 15v5h16v-5"/></svg><span>Nhập doanh số</span></a><a class="app-link" href="/sales"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10v18l-3-2-2 2-2-2-3 2V3Z"/><path d="M10 7h4m-4 4h4m-4 4h3"/></svg><span>Hoá đơn đã lưu</span></a><a class="app-link" href="/inventory"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 7 9-4 9 4-9 4-9-4Zm0 0v10l9 4 9-4V7M12 11v10M7 5l10 4"/></svg><span>Cập nhật tồn kho</span></a><a class="app-link" href="/chat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 1-8 8H5l-3 3V11a9 9 0 0 1 18 0Z"/><path d="M8 11h.01M12 11h.01M16 11h.01"/></svg><span>Trợ lý AI</span></a><a class="app-link" href="/setup"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2" fill="currentColor"/><circle cx="15" cy="12" r="2" fill="currentColor"/><circle cx="9" cy="18" r="2" fill="currentColor"/></svg><span>Danh mục & công thức</span></a></nav><div class="nav-footer"><strong>Dữ liệu cửa hàng của bạn</strong>BobaOps</div></aside><div class="app-topbar"><div class="breadcrumbs"><span>Cửa hàng</span><span>/</span><strong>Nhập doanh số</strong></div><a class="assistant-link" href="/chat">Hỏi trợ lý <span aria-hidden="true">↗</span></a></div><main class="page-index" id="main-content">
+  <header class="page-intro"><div class="eyebrow">HÔM NAY</div><h1>Nhập doanh số</h1><p>Ghi lượng bột làm kem, tải ảnh hoá đơn và kiểm tra số lượng trước khi duyệt.</p></header><div class="flow" aria-label="Quy trình nhập hoá đơn"><span class="flow-step active"><span class="flow-number">1</span>Bột kem</span><span class="flow-divider"></span><span class="flow-step"><span class="flow-number">2</span>Ảnh hoá đơn</span><span class="flow-divider"></span><span class="flow-step"><span class="flow-number">3</span>Kiểm tra</span><span class="flow-divider"></span><span class="flow-step"><span class="flow-number">4</span>Duyệt</span></div>
+<section class="panel receipt-powders" id="receipt-powder-section" aria-labelledby="receipt-powder-title">
+<div class="powder-heading"><div><h2 id="receipt-powder-title">1. Ghi lượng bột làm kem</h2><p class="hint">Nhập tổng bột dùng trong ngày, kể cả phần kem bỏ cuối ngày. Không dùng thì nhập 0.</p></div><span class="date-chip" id="receipt-powder-date">Ngày sử dụng sẽ lấy từ ảnh hoá đơn.</span></div>
+<div id="receipt-powder-rows"><p class="hint">Đang tải các loại bột…</p></div>
+<div class="toolbar"><select id="receipt-powder-add" aria-label="Thêm loại bột khác" disabled><option value="">+ Thêm loại bột khác</option></select></div>
+<p class="hint">Chỉ tính bột dùng làm kem. Matcha dùng pha đồ uống vẫn tính theo công thức. Nhập tổng cả ngày, không nhập phần tăng thêm.</p><div id="receipt-powder-feedback" class="hint" role="status" aria-live="polite"></div>
+</section>
   <div class="layout">
-    <section class="card"><h2>1. Upload a report</h2><p>JPG, PNG, or WebP · up to 10 MB. Your photo is sent to Google Gemini when you click Extract.</p>
-      <label for="image">Sales report photo</label><input id="image" type="file" accept="image/jpeg,image/png,image/webp">
-      <div class="actions"><button id="extract" disabled>Extract sales</button><span id="busy" role="status" aria-live="polite"></span></div>
+    <section class="card"><h2>2. Tải ảnh hoá đơn</h2><p>Ảnh được gửi đến Gemini khi bạn chọn Trích xuất.</p>
+      <div class="upload-zone"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 22V7m-5 5 5-5 5 5M6 21v6h20v-6"/></svg><label for="image">Chọn ảnh hoặc kéo thả vào đây</label><small>JPG, PNG, WebP · tối đa 10 MB</small><span class="file-name" id="file-name"></span><input id="image" type="file" accept="image/jpeg,image/png,image/webp" aria-label="Chọn ảnh báo cáo"></div>
+      <div class="actions"><button id="extract" disabled>Trích xuất</button><span id="busy" role="status" aria-live="polite"></span></div>
       <p id="status" role="status"></p><div id="error" role="alert" hidden></div><img id="preview" alt="Uploaded sales report" hidden>
     </section>
-    <section class="card"><h2>2. Check the extraction</h2><p>Compare every row with the photo before using it for inventory calculations.</p>
-      <div class="actions"><button id="save-draft" disabled>Save sales draft</button><a href="/sales">View saved sales →</a></div>
-      <p id="save-status" role="status"></p><a id="review-link" hidden>Review saved draft →</a>
-      <div id="empty" class="empty">Your extracted sales will appear here.</div>
-      <div id="result" hidden><div class="meta"><label>Report date <input id="date" type="date" required></label><span id="count"></span></div>
-        <div id="warnings"></div><table><thead><tr><th>ITEM NAME</th><th>QUANTITY</th></tr></thead><tbody id="rows"></tbody></table>
-        <div class="actions"><a id="download" class="download" download="sales.json">Download JSON</a></div>
-        <p>Save each photo for the same date to one daily draft. Review overlapping rows on Saved sales. Saving does not deduct inventory.</p>
-        <details><summary>View JSON</summary><pre id="json"></pre></details>
+    <section class="card"><h2>3. Kiểm tra kết quả</h2><p>Đối chiếu với ảnh trước khi lưu báo cáo.</p>
+      <div class="actions"><button id="save-draft" disabled>Lưu bản nháp</button><a href="/sales">Xem hoá đơn →</a></div>
+      <p id="save-status" role="status"></p><a id="review-link" hidden>Mở bản nháp để duyệt →</a>
+      <div id="empty" class="empty">Chưa có dữ liệu. Tải ảnh và chọn Trích xuất.</div>
+      <div id="result" hidden><div class="meta"><label>Ngày báo cáo <input id="date" type="date" required></label><span id="count"></span></div>
+        <div id="warnings"></div><table><thead><tr><th>Tên sản phẩm</th><th>Số lượng</th></tr></thead><tbody id="rows"></tbody></table>
+        <div class="actions"><a id="download" class="download" download="sales.json">Tải dữ liệu JSON</a></div>
+        <p>Các ảnh cùng ngày được lưu vào một bản nháp. Bột làm kem được ghi khi lưu; các nguyên liệu khác trừ kho khi duyệt.</p>
+        <details><summary>Xem dữ liệu chi tiết</summary><pre id="json"></pre></details>
       </div>
     </section>
   </div>
 </main>
+<script src="/assets/receipt-powders.js"></script>
 <script>
+const uiText=v=>window.BobaUI?.text(v)??v;const unitText=v=>window.BobaUI?.unit(v)??v;const reportStatus=v=>window.BobaUI?.status(v)??v;
 const $=id=>document.getElementById(id);let configured=false,previewURL=null,downloadURL=null,extracted=null;
-async function checkStatus(){try{const response=await fetch('/api/status');if(!response.ok)throw Error();const s=await response.json();configured=s.key_configured;$('status').textContent=configured?'Key configured · '+s.model:'Add your key to .env, then choose a photo. The key is loaded automatically.';}catch{configured=false;$('status').textContent='Cannot reach the backend.'}}
+async function checkStatus(){try{const response=await fetch('/api/status');if(!response.ok)throw Error();const s=await response.json();configured=s.key_configured;$('status').textContent=configured?"Sẵn sàng trích xuất":"Chưa cấu hình Gemini. Thêm khóa API vào tệp .env để trích xuất.";}catch{configured=false;$('status').textContent="Chưa kết nối được máy chủ."}}
 $('image').addEventListener('change',async()=>{
-  extracted=null;$('save-draft').disabled=true;$('save-status').textContent='';$('review-link').hidden=true;
+  extracted=null;window.ReceiptPowders?.syncDate(null);$('save-draft').disabled=true;$('save-status').textContent='';$('review-link').hidden=true;
   $('result').hidden=true;$('empty').hidden=false;$('error').hidden=true;$('extract').disabled=true;$('preview').hidden=true;
   if(previewURL){URL.revokeObjectURL(previewURL);previewURL=null}if(downloadURL){URL.revokeObjectURL(downloadURL);downloadURL=null}
   const file=$('image').files[0];if(!file)return;
-  if(file.size>10*1024*1024){$('error').textContent='Choose an image smaller than 10 MB.';$('error').hidden=false;return}
+  if(file.size>10*1024*1024){$('error').textContent="Vui lòng chọn ảnh nhỏ hơn 10 MB.";$('error').hidden=false;return}
   previewURL=URL.createObjectURL(file);$('preview').src=previewURL;$('preview').hidden=false;
   await checkStatus();$('extract').disabled=!configured;
 });
 $('extract').addEventListener('click',async()=>{
+  if(!await window.ReceiptPowders.validate())return;window.ReceiptPowders.setBusy(true);
   extracted=null;$('save-draft').disabled=true;$('save-status').textContent='';$('review-link').hidden=true;
-  $('extract').disabled=true;$('image').disabled=true;$('busy').textContent='Reading the photo…';$('error').hidden=true;$('result').hidden=true;$('empty').hidden=false;
-  const started=Date.now();const progress=setInterval(()=>{$('busy').textContent='Reading the photo… '+Math.floor((Date.now()-started)/1000)+'s';},1000);
+  $('extract').disabled=true;$('image').disabled=true;$('busy').textContent="Đang đọc ảnh…";$('error').hidden=true;$('result').hidden=true;$('empty').hidden=false;
+  const started=Date.now();const progress=setInterval(()=>{$('busy').textContent="Đang đọc ảnh… "+Math.floor((Date.now()-started)/1000)+"giây";},1000);
   try{
     const form=new FormData();form.append('image',$('image').files[0]);
     const response=await fetch('/api/extract',{method:'POST',body:form});const data=await response.json();
-    if(!response.ok)throw Error(typeof data.detail==='string'?data.detail:'Extraction failed.');
-    extracted=data;$('save-draft').disabled=false;$('date').value=data.date||'';$('count').textContent=data.items.length+' items';$('rows').replaceChildren();$('warnings').replaceChildren();
+    if(!response.ok)throw Error(typeof data.detail==='string'?data.detail:"Chưa trích xuất được ảnh. Vui lòng thử lại.");
+    extracted=data;$('save-draft').disabled=false;$('date').value=data.date||'';window.ReceiptPowders.syncDate($('date').value);$('count').textContent=data.items.length+" sản phẩm";$('rows').replaceChildren();$('warnings').replaceChildren();
     for(const issue of data.issues){const p=document.createElement('p');p.className='warning';p.textContent=issue;$('warnings').append(p)}
-    for(const item of data.items){const tr=document.createElement('tr'),name=document.createElement('td'),quantity=document.createElement('td');name.textContent=item.item_name||'Unreadable name';quantity.textContent=item.quantity??'—';for(const issue of item.issues){const note=document.createElement('span');note.className='row-issue';note.textContent=issue;name.append(note)}tr.append(name,quantity);$('rows').append(tr)}
+    for(const item of data.items){const tr=document.createElement('tr'),name=document.createElement('td'),quantity=document.createElement('td');name.textContent=item.item_name||"Tên chưa đọc được";quantity.textContent=item.quantity??'—';for(const issue of item.issues){const note=document.createElement('span');note.className='row-issue';note.textContent=issue;name.append(note)}tr.append(name,quantity);$('rows').append(tr)}
     const json=JSON.stringify(data,null,2);$('json').textContent=json;if(downloadURL)URL.revokeObjectURL(downloadURL);downloadURL=URL.createObjectURL(new Blob([json],{type:'application/json'}));$('download').href=downloadURL;$('download').download='sales-'+(data.date||'review')+'.json';$('result').hidden=false;$('empty').hidden=true;
   }catch(error){$('error').textContent=error.message;$('error').hidden=false;}
-  finally{clearInterval(progress);$('busy').textContent='';$('extract').disabled=!configured;$('image').disabled=false;}
+  finally{window.ReceiptPowders.setBusy(false);clearInterval(progress);$('busy').textContent='';$('extract').disabled=!configured;$('image').disabled=false;}
 });
 $('save-draft').addEventListener('click',async()=>{
-  if(!extracted)return;
-  if(!$('date').value||!$('date').reportValidity()){$('save-status').textContent='Choose the report date before saving.';return}
-  $('save-draft').disabled=true;$('extract').disabled=true;$('image').disabled=true;$('date').disabled=true;$('error').hidden=true;$('save-status').textContent='Saving draft…';
+  if(!extracted||!await window.ReceiptPowders.validate())return;
+  if(!$('date').value||!$('date').reportValidity()){$('save-status').textContent="Chọn ngày báo cáo trước khi lưu.";return}
+  window.ReceiptPowders.setBusy(true);$('save-draft').disabled=true;$('extract').disabled=true;$('image').disabled=true;$('date').disabled=true;$('error').hidden=true;$('save-status').textContent="Đang lưu bản nháp…";
   try{
-    const form=new FormData();form.append('report',JSON.stringify(extracted));form.append('report_date',$('date').value);form.append('image',$('image').files[0]);
+    const powderUsage=await window.ReceiptPowders.payloadFor($('date').value);
+    const form=new FormData();form.append('powder_usage',JSON.stringify(powderUsage));form.append('report',JSON.stringify(extracted));form.append('report_date',$('date').value);form.append('image',$('image').files[0]);
     const response=await fetch('/api/sales/drafts',{method:'POST',body:form});const data=await response.json();
-    if(!response.ok)throw Error(typeof data.detail==='string'?data.detail:'Could not save the draft.');
-    $('save-status').textContent='Saved for '+data.date+' · '+data.images.length+' photo(s). Inventory unchanged.';
+    if(!response.ok)throw Error(typeof data.detail==='string'?data.detail:"Chưa lưu được bản nháp.");
+    $('save-status').textContent="Đã lưu hoá đơn và lượng bột ngày "+data.date+' · '+data.images.length+" ảnh.";window.ReceiptPowders.saved();
     $('review-link').href='/sales?report='+encodeURIComponent(data.id);$('review-link').hidden=false;
   }catch(error){$('error').textContent=error.message;$('error').hidden=false;$('save-status').textContent='';$('save-draft').disabled=false}
-  finally{$('extract').disabled=!configured;$('image').disabled=false;$('date').disabled=false}
+  finally{window.ReceiptPowders.setBusy(false);$('extract').disabled=!configured;$('image').disabled=false;$('date').disabled=false}
 });
+$('date').addEventListener('change',()=>window.ReceiptPowders.syncDate($('date').value));
 checkStatus();
 </script></body></html>

@@ -13,13 +13,13 @@ must already have the inventory migrations and `SHOP_STORAGE=postgres` configure
 ## How the files connect
 
 1. `frontend/dashboard.html` requests `GET /api/analytics/dashboard`.
-2. `app.py` serves that page and registers the router from `analytics.py`.
-3. `analytics.py` runs SQLAlchemy SELECT queries against PostgreSQL. It groups
+2. `app.py` serves that page and registers the router from `bobaops/analytics/routes.py`.
+3. `bobaops/analytics/routes.py` runs SQLAlchemy SELECT queries against PostgreSQL. It groups
    approved sales by date/product and sums recorded inventory deductions. One
    repeatable-read transaction gives a consistent view across the queries.
 4. The endpoint returns JSON. The browser fills tables and uses Chart.js to draw
    the charts. Date changes repeat this read-only request. Gemini is not involved.
-5. `inventory.py` includes category and price-assumption metadata in new approval
+5. `bobaops/inventory/calculations.py` includes category and price-assumption metadata in new approval
    snapshots so later catalog edits do not reclassify those approved sales.
 
 SQL does the database selection and stock aggregation; Python handles summary

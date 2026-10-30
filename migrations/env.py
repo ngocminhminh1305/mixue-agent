@@ -1,5 +1,5 @@
 from alembic import context
-from database import database_url, get_engine
+from bobaops.core.database import database_url, get_engine
 
 if context.is_offline_mode():
     context.configure(url=database_url(), literal_binds=True, dialect_opts={'paramstyle': 'named'})

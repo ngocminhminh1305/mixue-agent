@@ -5,7 +5,7 @@ from uuid import uuid4
 
 from sqlalchemy import delete, insert, select, update
 
-from database import get_engine, get_tables
+from bobaops.core.database import get_engine, get_tables
 
 
 class StaleRevision(ValueError):
@@ -21,7 +21,7 @@ def latest(conn, table, column, owner):
 
 
 def read_config():
-    from shop_config import ShopConfig
+    from bobaops.catalog.schemas import ShopConfig
     t = get_tables()
     # Repeatable-read gives a consistent snapshot across these independent tables.
     with get_engine().connect().execution_options(isolation_level='REPEATABLE READ') as conn, conn.begin():
@@ -76,7 +76,7 @@ def stored_parts(conn, table, fk, owner):
 
 
 def write_config(config, initial_import=False, *, connection=None):
-    from shop_config import check_config
+    from bobaops.catalog.schemas import check_config
     check_config(config)
     t = get_tables()
     with (get_engine().begin() if connection is None else nullcontext(connection)) as conn:

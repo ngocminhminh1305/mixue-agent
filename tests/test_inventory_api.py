@@ -5,7 +5,7 @@ from uuid import uuid4
 from fastapi import HTTPException
 from pydantic import ValidationError
 
-from inventory_api import CountBatch, Purchase, StockCount, Threshold, ThresholdBatch, Waste, validate_quantity
+from bobaops.inventory.routes import CountBatch, Purchase, StockCount, Threshold, ThresholdBatch, Waste, validate_quantity
 
 
 class InventoryEntryValidationTests(unittest.TestCase):

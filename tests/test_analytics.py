@@ -2,7 +2,7 @@
 import unittest
 from datetime import date
 
-from analytics import summarize_sales
+from bobaops.analytics.routes import summarize_sales
 
 
 class AnalyticsTests(unittest.TestCase):

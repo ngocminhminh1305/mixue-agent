@@ -4,9 +4,12 @@ Ice-cream powders are deducted from actual daily production totals, including po
 
 ## Daily workflow
 
-1. Open Inventory → Powders used for ice cream and select the production date.
-2. Enter the total grams of each powder used for ice cream that day. Save one row or all entered rows.
-3. Leave a field blank to keep its saved value. Enter zero to correct a saved total to zero.
+1. Open Nhập doanh số and enter the total daily grams of Bột kem nguyên vị. Enter zero if none was used.
+2. Add other powders, such as matcha for ice cream, only when needed.
+3. Extract the receipt and check its date. Powder usage uses that date automatically.
+4. Save the draft. The receipt and daily powder totals commit together. Other recipe-based deductions still wait for report approval.
+
+Every displayed powder row requires a quantity. Unselected optional powders remain unchanged. There is no separate date input for powders. The original daily-usage API remains available for existing clients and corrections.
 
 These are daily totals, not additional quantities. Changing 1,500 g to 2,000 g deducts only another 500 g. Repeating an identical save does not deduct again. Concurrent or stale edits require a reload. A note and movement history preserve corrections.
 
@@ -30,9 +33,9 @@ Older approved reports retain their original automatic deductions. The backend b
 
 ## Files and migration
 
-- `ice_cream_usage.py`: daily total API, stock movements, concurrency and duplicate safeguards.
-- `frontend/ice-cream-usage.js` and `frontend/inventory.html`: daily entry table.
+- `bobaops/inventory/powder_usage.py`: daily total API, stock movements, concurrency and duplicate safeguards.
+- `frontend/receipt-powders.js` and `frontend/index.html`: receipt-linked daily entry. `frontend/ice-cream-usage.js` is the earlier standalone view.
 - Migration `0006_ice_cream_usage`: powder flags, versioned deduction mode, daily totals and ledger operation type.
-- `inventory.py`: manual preparation behavior; `analytics.py`: actual daily usage.
+- `bobaops/inventory/calculations.py`: manual preparation behavior; `bobaops/analytics/routes.py`: actual daily usage.
 
-Run migrations before restarting the backend. Tests use a separate test database. This feature does not import the pending confirmed product catalog or invent production quantities.
+Run migrations before restarting the backend. Tests use a separate test database. The page reorganization needs no new schema migration and does not invent production quantities.

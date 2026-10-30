@@ -6,8 +6,8 @@ The catalog importer reads private confirmed product recipes, preparation recipe
 
 1. Back up PostgreSQL with `pg_dump` before applying an import.
 2. Run `python3 -m alembic upgrade head` for schema 0007.
-3. Run `python3 import_confirmed_catalog.py` to validate sources and write a private review plan, without changing catalog data.
-4. Run `python3 import_confirmed_catalog.py --apply` to apply the reviewed data.
+3. Run `python3 -m scripts.import_confirmed_catalog` to validate sources and write a private review plan, without changing catalog data.
+4. Run `python3 -m scripts.import_confirmed_catalog --apply` to apply the reviewed data.
 5. Restart the backend so its reflected database schema includes the new columns.
 
 The default private source locations are `data/private/confirmed_catalog/` and `data/private/demo/inventory_2026-10-30.json`. Alternate locations can be supplied with `--sources` and `--demo`.

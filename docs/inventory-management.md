@@ -108,12 +108,12 @@ is a current ledger, not a backdated reconciliation engine.
 ## Files and schema
 
 `app.py` serves `frontend/inventory.html` at `/inventory` and registers the router
-from `inventory_api.py`. That module uses `database.py` connections and Decimal
+from `bobaops/inventory/routes.py`. That module uses `bobaops/core/database.py` connections and Decimal
 quantities. Migration 0004 adds optional warning levels and purchase dates,
 `inventory_operations` for retry-safe requests, and `stock_counts` for observed
 counts. The `inventory_balances` view recognizes a count as a known baseline.
-`inventory.py` uses that same baseline when previewing sales consumption.
-`catalog_repository.py` protects opening balances after a physical count. Existing
+`bobaops/inventory/calculations.py` uses that same baseline when previewing sales consumption.
+`bobaops/catalog/repository.py` protects opening balances after a physical count. Existing
 products, recipes, sales snapshots and movements are retained.
 
 | Endpoint | Purpose |

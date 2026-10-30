@@ -78,7 +78,7 @@ catalog data afterward does not recalculate approved sales. The Dashboard and as
 ## Storage and technical connections
 
 `frontend/index.html` sends the extracted JSON, chosen report date and original
-photo to `POST /api/sales/drafts`. The `sales.py` router validates the data and
+photo to `POST /api/sales/drafts`. The `bobaops/sales/routes.py` router validates the data and
 creates/appends a draft in a database transaction. `app.py` registers this router
 and serves `frontend/sales.html` at `/sales`.
 

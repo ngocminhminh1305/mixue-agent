@@ -72,12 +72,12 @@ they do not prevent inventory calculations. Revenue analytics are separate work.
 
 ## How the files connect
 
-`frontend/sales.html` requests a preview from the `sales.py` router. `inventory.py`
+`frontend/sales.html` requests a preview from the `bobaops/sales/routes.py` router. `bobaops/inventory/calculations.py`
 loads catalog versions and ledger balances, calculates consumption, and produces
 a preview token identifying the reviewed state. The approval request includes
 that token, report revision, completeness confirmation and assumption acceptance.
 
-Inside one database transaction, `sales.py` locks the report, holds the shared
+Inside one database transaction, `bobaops/sales/routes.py` locks the report, holds the shared
 catalog revision lock, locks stock rows in ID order, and recalculates the plan.
 Changed sales, catalog revision or relevant stock balances invalidate the token;
 the user must preview again. It stores version links, negative sale movements,

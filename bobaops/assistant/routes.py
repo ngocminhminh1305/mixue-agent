@@ -12,10 +12,10 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import select
 
-from analytics import dashboard
-from catalog_repository import latest
-from database import environment
-from inventory_api import connection, stock_states
+from bobaops.analytics.routes import dashboard
+from bobaops.catalog.repository import latest
+from bobaops.core.database import environment
+from bobaops.inventory.routes import connection, stock_states
 
 router = APIRouter(prefix='/api/assistant')
 IN_FLIGHT = threading.BoundedSemaphore(1)

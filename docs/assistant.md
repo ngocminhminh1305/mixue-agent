@@ -61,7 +61,7 @@ queried so users can check them.
 
 `frontend/chat.html` sends a question and up to eight previous conversation
 messages to `POST /api/assistant/chat`. `app.py` serves the page and registers
-`assistant.py`'s router.
+`bobaops/assistant/routes.py`'s router.
 
 1. OpenRouter selects a predefined tool, with validated arguments. It can call
    `read_sales`, `read_stock`, `read_recipes`, or ask a clarification question.

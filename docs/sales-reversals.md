@@ -85,13 +85,13 @@ zero sales, retained photos, reuploads and repeated corrections.
 
 ## Files implementing this stage
 
-- `reversals.py`: preview, validated reversal transaction, correction cloning.
-- `sales.py`: active-date/photo handling, reversal metadata and safe photo cleanup.
+- `bobaops/sales/reversals.py`: preview, validated reversal transaction, correction cloning.
+- `bobaops/sales/routes.py`: active-date/photo handling, reversal metadata and safe photo cleanup.
 - `migrations/versions/0005_sales_reversal.py` and `.sql`: schema migration.
 - `app.py`: reversal router registration.
-- `inventory_api.py`: restoration links in stock history.
-- `analytics.py`: active correction coverage and separate reversal activity.
-- `assistant.py`: reversal activity description for its existing read-only tool.
+- `bobaops/inventory/routes.py`: restoration links in stock history.
+- `bobaops/analytics/routes.py`: active correction coverage and separate reversal activity.
+- `bobaops/assistant/routes.py`: reversal activity description for its existing read-only tool.
 - `frontend/sales.html`: reversal review and correction/history links.
 - `frontend/dashboard.html`, `frontend/chat.html`: display reversal activity.
 - `tests/test_reversals.py`, `tests/test_postgres.py`, `tests/test_analytics.py`:

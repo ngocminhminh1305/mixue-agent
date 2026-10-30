@@ -8,8 +8,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, insert, select, update
 
-from inventory_api import checked_balance, fingerprint, formatted
-from sales import connection, details
+from bobaops.inventory.routes import checked_balance, fingerprint, formatted
+from bobaops.sales.routes import connection, details
 
 router = APIRouter(prefix='/api/sales')
 

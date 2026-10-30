@@ -1,14 +1,14 @@
 """One-time private catalog import into a migrated, empty PostgreSQL database."""
-from pathlib import Path
+from bobaops.core.paths import PRIVATE_DATA_DIR
 
 from sqlalchemy.exc import SQLAlchemyError
 
-from catalog_repository import write_config
-from shop_config import ShopConfig
+from bobaops.catalog.repository import write_config
+from bobaops.catalog.schemas import ShopConfig
 
 
 def main():
-    source = Path(__file__).resolve().parent / 'data/private/shop_config.json'
+    source = PRIVATE_DATA_DIR / 'shop_config.json'
     if not source.exists():
         raise SystemExit('Private shop settings not found. Expected data/private/shop_config.json.')
     try:

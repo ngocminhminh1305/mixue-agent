@@ -2,7 +2,7 @@ import copy
 import unittest
 from decimal import Decimal
 
-from inventory import calculate_consumption
+from bobaops.inventory.calculations import calculate_consumption
 
 
 class ConsumptionTests(unittest.TestCase):

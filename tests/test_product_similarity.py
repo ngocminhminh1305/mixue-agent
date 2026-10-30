@@ -1,7 +1,7 @@
 """OCR-name regressions with fictional quantities and no provider requests."""
 import unittest
 
-from sales import matching_index, resolve_product
+from bobaops.sales.routes import matching_index, resolve_product
 
 
 class SimilarityTests(unittest.TestCase):

@@ -9,7 +9,7 @@ Matching runs in Python after image extraction and when “Match unmatched produ
 3. An approximate candidate is selected only if its cosine score is at least 0.86, its lead over the next distinct product is at least 0.10, its character edit ratio is at least 0.88, and its protected variant markers agree. These are initial conservative thresholds tested against supplied OCR errors, not calibrated probabilities of correctness.
 4. Otherwise up to three compatible suggestions with scores of at least 0.35 are shown. Selecting one is an explicit manual edit that must be saved. An unmatched row still prevents approval.
 
-Constants and variant markers are in `product_similarity.py`. Exact matching remains available separately through `sales.match_product`; draft ingestion/rematching use `sales.resolve_product`.
+Constants and variant markers are in `bobaops/sales/similarity.py`. Exact matching remains available separately through `bobaops.sales.routes.match_product`; draft ingestion/rematching use `bobaops.sales.routes.resolve_product`.
 
 ## Guards and review
 

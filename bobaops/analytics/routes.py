@@ -7,8 +7,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import Date, case, func, select
 
-from database import environment
-from inventory_api import connection, formatted, stock_states
+from bobaops.core.database import environment
+from bobaops.inventory.routes import connection, formatted, stock_states
 
 router = APIRouter(prefix='/api/analytics')
 DRINK_CATEGORIES = {'fruit_tea', 'milk_tea', 'coffee'}
