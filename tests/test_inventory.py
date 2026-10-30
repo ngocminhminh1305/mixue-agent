@@ -96,5 +96,30 @@ class ConsumptionTests(unittest.TestCase):
         self.assertEqual(result['rows'][0]['deductions'][0]['quantity'], result['consumption'][0]['quantity'])
 
 
+    def test_manual_ice_cream_skips_powders_but_keeps_packaging(self):
+        self.stocks['tea']['unit'] = 'g'
+        self.stocks['powder']['ice_cream_powder'] = True
+        self.preparations['tea']['deduction_mode'] = 'manual_ice_cream'
+        self.preparations['tea']['output_quantity'] = None
+        result = self.calculate()
+        self.assertEqual(result['blockers'], [])
+        self.assertEqual([r['item_id'] for r in result['consumption']], ['cup'])
+        self.assertEqual(result['manual_ice_cream'][0]['item_id'], 'tea')
+        self.assertIn('prep-version', result['rows'][0]['preparation_version_ids'])
+
+    def test_shared_powder_in_automatic_drink_base_is_still_deducted(self):
+        self.stocks['tea']['unit'] = 'g'
+        self.stocks['powder']['ice_cream_powder'] = True
+        self.preparations['tea']['deduction_mode'] = 'manual_ice_cream'
+        self.stocks['concentrate'] = {'id': 'concentrate', 'name': 'Drink concentrate', 'unit': 'ml', 'kind': 'prepared'}
+        self.components['recipe'].append({'item_id': 'concentrate', 'quantity': 160})
+        self.preparations['concentrate'] = {'id': 'drink-prep', 'output_quantity': 2000}
+        self.inputs['drink-prep'] = [{'item_id': 'powder', 'quantity': 500}]
+        result = self.calculate()
+        self.assertEqual(result['blockers'], [])
+        usage = {r['item_id']: Decimal(r['quantity']) for r in result['consumption']}
+        self.assertEqual(usage, {'cup': Decimal(10), 'powder': Decimal(400)})
+
+
 if __name__ == '__main__':
     unittest.main()

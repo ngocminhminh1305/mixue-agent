@@ -12,11 +12,11 @@ from inventory_api import connection, formatted, stock_states
 
 router = APIRouter(prefix='/api/analytics')
 DRINK_CATEGORIES = {'fruit_tea', 'milk_tea', 'coffee'}
-CATEGORIES = DRINK_CATEGORIES | {'cone', 'topping'}
+CATEGORIES = DRINK_CATEGORIES | {'cone', 'topping', 'sundae'}
 
 
 def bucket():
-    return {'quantity': 0, 'drinks': 0, 'cones': 0, 'toppings': 0, 'uncategorized': 0,
+    return {'quantity': 0, 'drinks': 0, 'cones': 0, 'toppings': 0, 'sundaes': 0, 'uncategorized': 0,
             'known_price_revenue_vnd': 0, 'confirmed_price_revenue_vnd': 0,
             'assumed_price_revenue_vnd': 0, 'unverified_price_revenue_vnd': 0,
             'priced_units': 0, 'missing_price_units': 0, 'missing_price_rows': 0,
@@ -29,7 +29,7 @@ def add_sale(target, category, quantity, price, assumed):
         return
     target['valid_rows'] += 1
     target['quantity'] += quantity
-    key = 'drinks' if category in DRINK_CATEGORIES else 'cones' if category == 'cone' else 'toppings' if category == 'topping' else 'uncategorized'
+    key = 'drinks' if category in DRINK_CATEGORIES else 'cones' if category == 'cone' else 'toppings' if category == 'topping' else 'sundaes' if category == 'sundae' else 'uncategorized'
     target[key] += quantity
     if price is None:
         if quantity:
@@ -51,7 +51,7 @@ def finished(target, has_report=True):
     result['revenue_is_partial'] = bool(result['missing_price_rows'] or result['invalid_quantity_rows'])
     result['revenue_is_provisional'] = result['assumed_price_revenue_vnd'] > 0
     if not has_report or no_readable_quantities:
-        for key in ('quantity', 'drinks', 'cones', 'toppings', 'uncategorized'):
+        for key in ('quantity', 'drinks', 'cones', 'toppings', 'sundaes', 'uncategorized'):
             result[key] = None
     return result
 
@@ -158,6 +158,12 @@ def activity(conn, t, date_from, date_to, zone, reports):
                     func.sum(case(((m.c.kind != 'waste') & (m.c.signed_quantity < 0), -m.c.signed_quantity), else_=0)).label('removed'))
                     .where(m.c.kind.in_(['waste', 'correction', 'opening_adjustment', 'reversal']), m.c.occurred_at >= start,
                            m.c.occurred_at < end).group_by(m.c.item_id)).mappings()}
+    powder_usage = {}
+    if 'ice_cream_daily_usage' in t:
+        daily = t['ice_cream_daily_usage']
+        powder_usage = dict(conn.execute(select(daily.c.item_id, func.sum(daily.c.quantity))
+            .where(daily.c.used_on >= date_from, daily.c.used_on <= date_to).group_by(daily.c.item_id)).all())
+    total_usage = {key: usage.get(key, Decimal(0)) + powder_usage.get(key, Decimal(0)) for key in set(usage) | set(powder_usage)}
     stocks = {row['id']: row for row in conn.execute(select(t['stock_items'])).mappings()}
     frozen_names = {}
     for saved in sorted(reports, key=lambda row: row['report_date']):
@@ -165,7 +171,9 @@ def activity(conn, t, date_from, date_to, zone, reports):
             for row in (saved.get('approval_snapshot') or {}).get('consumption', []):
                 frozen_names[row['item_id']] = row['name']
     ingredient_usage = [{'item_id': key, 'name': frozen_names.get(key, stocks[key]['name']), 'unit': stocks[key]['unit'],
-                         'quantity': formatted(value)} for key, value in usage.items()]
+                         'quantity': formatted(value), 'sales_quantity': formatted(usage.get(key, 0)),
+                         'ice_cream_quantity': formatted(powder_usage.get(key, 0))}
+                        for key, value in total_usage.items() if value]
     ingredient_usage.sort(key=lambda row: (row['unit'], -Decimal(row['quantity']), row['name']))
     entries = []
     for key in set(purchases) | set(adjustments):

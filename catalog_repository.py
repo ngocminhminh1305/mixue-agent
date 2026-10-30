@@ -1,5 +1,6 @@
 """Transactional PostgreSQL persistence for the existing shop-setup API."""
 from decimal import Decimal
+from contextlib import nullcontext
 from uuid import uuid4
 
 from sqlalchemy import delete, insert, select, update
@@ -27,7 +28,7 @@ def read_config():
         revision = conn.scalar(select(t['shop_state'].c.revision).where(t['shop_state'].c.id == 1))
         stocks = []
         for row in conn.execute(select(t['stock_items']).where(~t['stock_items'].c.is_deleted).order_by(t['stock_items'].c.id)).mappings():
-            stocks.append({k: row[k] for k in ('id', 'name', 'unit', 'kind', 'opening_stock', 'cost_per_unit', 'assumed', 'notes')})
+            stocks.append({k: row[k] for k in ('id', 'name', 'unit', 'kind', 'opening_stock', 'cost_per_unit', 'assumed', 'notes', 'ice_cream_powder', 'purchase_unit', 'purchase_quantity', 'purchase_price_vnd', 'purchase_description')})
         products = []
         for row in conn.execute(select(t['products']).where(~t['products'].c.is_deleted).order_by(t['products'].c.id)).mappings():
             product = {k: row[k] for k in ('id', 'name', 'category', 'size', 'active', 'assumed', 'notes')}
@@ -43,6 +44,7 @@ def read_config():
             prep = {k: row[k] for k in ('id', 'name', 'output_item_id', 'assumed', 'notes')}
             version = latest(conn, t['preparation_versions'], t['preparation_versions'].c.preparation_id, row['id'])
             prep['output_quantity'] = version['output_quantity'] if version else None
+            prep['deduction_mode'] = version['deduction_mode'] if version else 'automatic'
             prep['inputs'] = [] if version is None else [dict(x) for x in conn.execute(
                 select(t['preparation_inputs'].c.item_id, t['preparation_inputs'].c.quantity)
                 .where(t['preparation_inputs'].c.preparation_version_id == version['id']).order_by(t['preparation_inputs'].c.item_id)).mappings()]
@@ -73,11 +75,11 @@ def stored_parts(conn, table, fk, owner):
     return {x['item_id']: x['quantity'] for x in conn.execute(select(table).where(fk == owner)).mappings()}
 
 
-def write_config(config, initial_import=False):
+def write_config(config, initial_import=False, *, connection=None):
     from shop_config import check_config
     check_config(config)
     t = get_tables()
-    with get_engine().begin() as conn:
+    with (get_engine().begin() if connection is None else nullcontext(connection)) as conn:
         state = conn.execute(select(t['shop_state']).where(t['shop_state'].c.id == 1).with_for_update()).mappings().one()
         if initial_import:
             if state['revision'] != 0 or conn.scalar(select(t['stock_items'].c.id).limit(1)) is not None:
@@ -98,7 +100,7 @@ def write_config(config, initial_import=False):
         stock_values = []
         for item in config.stock_items:
             row = item.model_dump()
-            row.update(opening_stock=numeric(item.opening_stock), cost_per_unit=numeric(item.cost_per_unit))
+            row.update(opening_stock=numeric(item.opening_stock), cost_per_unit=numeric(item.cost_per_unit), purchase_quantity=numeric(item.purchase_quantity))
             stock_values.append(row)
         sync_records(conn, t['stock_items'], stock_values)
         for item in config.stock_items:
@@ -131,16 +133,16 @@ def write_config(config, initial_import=False):
         for prep in config.preparations:
             if prep.id in old_prep and prep.output_item_id != old_prep[prep.id]['output_item_id']:
                 raise ValueError('A saved preparation must keep its output stock item. Add a new preparation instead.')
-        sync_records(conn, t['preparations'], [{k: v for k, v in x.model_dump().items() if k not in {'inputs', 'output_quantity'}} for x in config.preparations])
+        sync_records(conn, t['preparations'], [{k: v for k, v in x.model_dump().items() if k not in {'inputs', 'output_quantity', 'deduction_mode'}} for x in config.preparations])
         for prep in config.preparations:
             old = latest(conn, t['preparation_versions'], t['preparation_versions'].c.preparation_id, prep.id)
-            changed = old is None or old['output_quantity'] != numeric(prep.output_quantity) or old['assumed'] != prep.assumed or old['notes'] != prep.notes
+            changed = old is None or old['deduction_mode'] != prep.deduction_mode or old['output_quantity'] != numeric(prep.output_quantity) or old['assumed'] != prep.assumed or old['notes'] != prep.notes
             if old is not None:
                 changed |= part_map(prep.inputs) != stored_parts(conn, t['preparation_inputs'], t['preparation_inputs'].c.preparation_version_id, old['id'])
             if changed:
                 identifier = uuid4().hex
                 conn.execute(insert(t['preparation_versions']).values(id=identifier, preparation_id=prep.id,
-                    version=1 if old is None else old['version'] + 1, output_quantity=numeric(prep.output_quantity), assumed=prep.assumed, notes=prep.notes))
+                    version=1 if old is None else old['version'] + 1, output_quantity=numeric(prep.output_quantity), deduction_mode=prep.deduction_mode, assumed=prep.assumed, notes=prep.notes))
                 for part in prep.inputs:
                     conn.execute(insert(t['preparation_inputs']).values(preparation_version_id=identifier, item_id=part.item_id, quantity=numeric(part.quantity)))
         conn.execute(delete(t['saved_questions']))

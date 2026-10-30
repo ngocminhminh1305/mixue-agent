@@ -45,6 +45,7 @@ def calculate_consumption(rows, products, stocks, recipes, components, preparati
     are emitted, and no water/ice usage is invented beyond configured recipes.
     """
     blockers, warnings, assumptions, plans = [], [], [], []
+    manual_outputs = []
     totals = defaultdict(Decimal)
     if not rows:
         blockers.append('The report has no sales rows.')
@@ -82,11 +83,20 @@ def calculate_consumption(rows, products, stocks, recipes, components, preparati
                     continue
                 if stock.get('assumed'):
                     assumptions.append(f'Ingredient: {stock["name"]}')
-                required = number(part['quantity']) * quantity
+                prep = preparations.get(stock['id']) if stock['kind'] == 'prepared' else None
+                if not (prep and prep.get('deduction_mode') == 'manual_ice_cream') and part['quantity'] is None:
+                    errors.append(f'quantity missing for {stock["name"]}')
+                    continue
+                required = number(part['quantity']) * quantity if part['quantity'] is not None else None
                 if stock['kind'] != 'prepared':
                     usage[stock['id']] += required
                     continue
                 prep = preparations.get(stock['id'])
+                if prep and prep.get('deduction_mode') == 'manual_ice_cream':
+                    used_preparations.add(prep['id'])
+                    manual_outputs.append({'item_id': stock['id'], 'name': stock['name']})
+                    warnings.append(f"{stock['name']}: powders are recorded separately on Inventory as actual daily ice-cream usage; they are not deducted from these sales. Other ingredients and packaging are still deducted.")
+                    continue
                 raw_parts = inputs.get(prep['id'], []) if prep else []
                 if not prep or prep.get('output_quantity') is None or number(prep['output_quantity']) <= 0 or not raw_parts:
                     errors.append(f'preparation inputs/yield missing for {stock["name"]}')
@@ -150,7 +160,8 @@ def calculate_consumption(rows, products, stocks, recipes, components, preparati
                             'starting_stock_known': known, 'balance_before': amount(before) if known else None,
                             'balance_after': amount(after) if known else None,
                             'ledger_balance_before': amount(before), 'ledger_balance_after': amount(after)})
-    return {'rows': plans, 'consumption': consumption, 'blockers': unique(blockers),
+    return {'rows': plans, 'consumption': consumption,
+            'manual_ice_cream': list({x['item_id']: x for x in manual_outputs}.values()), 'blockers': unique(blockers),
             'warnings': unique(warnings), 'assumptions': unique(assumptions)}
 
 
@@ -197,6 +208,12 @@ def build_preview(conn, tables, report, shop_revision):
     plan.update(report_id=report['id'], date=report['report_date'].isoformat(), revision=report['revision'],
                 shop_revision=shop_revision, recipe_policy='Current catalog at approval', approved=False,
                 can_approve=not plan['blockers'])
+    if 'ice_cream_daily_usage' in tables:
+        from ice_cream_usage import approval_conflict
+        conflict = approval_conflict(conn, tables, report['report_date'], [p for row in plan['rows'] for p in row['preparation_version_ids']])
+        if conflict:
+            plan['blockers'].append(conflict)
+            plan['can_approve'] = False
     canonical = json.dumps(plan, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
     plan['preview_token'] = hashlib.sha256(canonical.encode()).hexdigest()
     return plan

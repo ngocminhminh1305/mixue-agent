@@ -93,6 +93,13 @@ def matching_index(products, aliases):
         result[(base, None)].add(product['id'])
         if size:
             result[(base, size)].add(product['id'])
+        if product.get('category') == 'topping' and base.startswith('thêm '):
+            # Receipts list add-ons by ingredient name; keep the catalog's
+            # explicit “Thêm” label and only add exact comparison aliases.
+            topping = base[len('thêm '):].strip()
+            result[(topping, None)].add(product['id'])
+            if topping == 'trân châu nguyên vị':
+                result[('trân châu', None)].add(product['id'])
     for alias in aliases:
         if alias['product_id'] not in sizes:
             continue
@@ -168,7 +175,7 @@ def connection():
 
 def catalog(conn, t, include_inactive=False):
     p = t['products']
-    query = select(p.c.id, p.c.name, p.c.size, p.c.active).where(~p.c.is_deleted)
+    query = select(p.c.id, p.c.name, p.c.size, p.c.active, p.c.category).where(~p.c.is_deleted)
     if not include_inactive:
         query = query.where(p.c.active)
     return list(conn.execute(query.order_by(p.c.name)).mappings())

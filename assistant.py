@@ -56,7 +56,7 @@ class ClarifyArgs(Strict):
 ARGUMENTS = {'read_sales': SalesArgs, 'read_stock': SearchArgs, 'read_recipes': SearchArgs,
              'ask_clarification': ClarifyArgs}
 DESCRIPTIONS = {
-    'read_sales': 'Read approved sales for explicit inclusive dates (maximum 366 days). view: summary, products (all categories ranked by units), usage (raw ingredients/packaging), daily, activity (purchases/waste/reversals/corrections). Search filters names only in products/usage/activity; summary always describes the whole shop. Never use this for current stock.',
+    'read_sales': 'Read approved sales for explicit inclusive dates (maximum 366 days). view: summary, products (all categories ranked by units), usage (raw ingredients/packaging from approved sales plus recorded actual ice-cream powder usage for these dates), daily, activity (purchases/waste/reversals/corrections). Search filters names only in products/usage/activity; summary always describes the whole shop. Never use this for current stock.',
     'read_stock': 'Read CURRENT raw ingredient and packaging balances and low-stock thresholds. Optional search is a name substring. Unknown balances remain unknown; ledger estimates are not actual stock. For all low stock use empty search and inspect warnings; attention items are returned first.',
     'read_recipes': 'Read CURRENT active products, prices, ingredients per serving and relevant preparation yields. Search by product name. Multiple matches are separate sizes/products; never choose an ambiguous variant silently.',
     'ask_clarification': 'Ask a Vietnamese clarification question when required dates/product/scope are unclear, or explain unsupported actions. Use alone, without data tools. Does not access or change the database.',
@@ -104,7 +104,7 @@ def lookup(name, args):
         result = {'as_of': now, 'range': data['range'], 'summary': data['summary'], 'warnings': data['warnings'],
                   'view': args.view, 'summary_scope': 'Whole shop; search does not filter summary.'}
         if args.view == 'daily':
-            result['days'] = [{k: row[k] for k in ('date', 'status', 'drinks', 'cones', 'toppings', 'revenue_vnd', 'revenue_is_partial', 'revenue_is_provisional')}
+            result['days'] = [{k: row[k] for k in ('date', 'status', 'drinks', 'cones', 'sundaes', 'toppings', 'revenue_vnd', 'revenue_is_partial', 'revenue_is_provisional')}
                               for row in data['daily']]
         elif args.view != 'summary':
             key = {'products': 'products', 'usage': 'ingredient_usage', 'activity': 'inventory_activity'}[args.view]
@@ -132,7 +132,7 @@ def lookup(name, args):
             def parts(table_name, foreign_key, identifier):
                 table = tables[table_name]
                 return [{'item_id': c['item_id'], 'name': stock[c['item_id']]['name'],
-                         'quantity': str(c['quantity']), 'unit': stock[c['item_id']]['unit'],
+                         'quantity': str(c['quantity']) if c['quantity'] is not None else None, 'unit': stock[c['item_id']]['unit'],
                          'kind': stock[c['item_id']]['kind'], 'assumed': stock[c['item_id']]['assumed']}
                         for c in conn.execute(select(table).where(table.c[foreign_key] == identifier)
                                               .order_by(table.c.item_id)).mappings()]
@@ -149,7 +149,7 @@ def lookup(name, args):
                     if not prep:
                         continue
                     version = latest(conn, tables['preparation_versions'], tables['preparation_versions'].c.preparation_id, prep['id'])
-                    yields.append({'name': prep['name'], 'output': stock[prep['output_item_id']]['name'],
+                    yields.append({'deduction_mode': version['deduction_mode'] if version else 'automatic', 'name': prep['name'], 'output': stock[prep['output_item_id']]['name'],
                                    'output_quantity': str(version['output_quantity']) if version and version['output_quantity'] is not None else None,
                                    'unit': stock[prep['output_item_id']]['unit'],
                                    'assumed': prep['assumed'] or (version['assumed'] if version else True),

@@ -6,6 +6,30 @@ from sales import DraftEdit, Extraction, match_product, matching_index, name_and
 
 
 class SalesValidationTests(unittest.TestCase):
+    def test_topping_receipt_names_without_them_and_short_original_boba(self):
+        names = ['Trân châu trắng', 'Thạch dừa', 'Lô hội', 'Trân châu nguyên vị',
+                 'Thạch đào', 'Thạch đường đen', 'Vụn ốc quế', 'Vụn oreo']
+        products = [{'id': str(i), 'name': 'Thêm '+name, 'category': 'topping', 'size': None}
+                    for i, name in enumerate(names)]
+        index = matching_index(products, [])
+        for i, name in enumerate(names):
+            self.assertEqual(match_product(name.upper()+' (MT)', index), str(i))
+            self.assertEqual(match_product('Thêm '+name, index), str(i))
+        self.assertEqual(match_product(' trân châu (MT) ', index), '3')
+        self.assertIsNone(match_product('Trân châu đen', index))
+        self.assertIsNone(match_product('Thạch', index))
+        self.assertIsNone(match_product('Trân châu', index, available={'0'}))
+
+    def test_topping_aliases_preserve_ambiguity_and_drink_names(self):
+        products = [
+            {'id': 't', 'name': 'Thêm Trân châu nguyên vị', 'category': 'topping'},
+            {'id': 'other', 'name': 'Trân châu', 'category': 'topping'},
+            {'id': 'drink', 'name': 'Thêm Trà Sữa', 'category': 'milk_tea', 'size': 'M'}]
+        index = matching_index(products, [])
+        self.assertIsNone(match_product('Trân châu', index))
+        self.assertIsNone(match_product('Trà Sữa', index))
+        self.assertEqual(match_product('Thêm Trà Sữa', index), 'drink')
+
     def test_match_pos_suffix_but_preserve_accents_and_sizes(self):
         self.assertEqual(normalized_name('  Trà Sữa  M (MT) '), normalized_name('Trà sữa M'))
         self.assertNotEqual(normalized_name('Trà sữa M'), normalized_name('Trà sữa L'))

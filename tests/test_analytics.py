@@ -38,6 +38,13 @@ class AnalyticsTests(unittest.TestCase):
         self.assertTrue(result['revenue_is_partial'])
         self.assertTrue(result['revenue_is_provisional'])
 
+    def test_sundaes_are_counted_separately_and_keep_revenue(self):
+        summary = self.summarize([self.report()], [self.sale(category='sundae',quantity=4,assumed=False)])['summary']
+        self.assertEqual(summary['sundaes'],4)
+        self.assertEqual(summary['drinks'],0)
+        self.assertEqual(summary['uncategorized'],0)
+        self.assertEqual(summary['revenue_vnd'],100000)
+
     def test_all_prices_unknown_is_not_zero_revenue(self):
         result = self.summarize([self.report()], [self.sale(price=None)])['summary']
         self.assertEqual(result['drinks'], 3)

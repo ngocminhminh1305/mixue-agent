@@ -153,6 +153,7 @@ def stock_states(conn, t, ids=None):
         known = row['opening_stock'] is not None or bool(seen.get('count_count'))
         threshold = row['low_stock_threshold']
         state = {'id': row['id'], 'name': row['name'], 'unit': row['unit'], 'kind': row['kind'],
+                 'ice_cream_powder': row.get('ice_cream_powder', False),
                  'balance_known': known, 'quantity': formatted(balance) if known else None,
                  'ledger_estimate': formatted(balance), 'negative_ledger': balance < 0,
                  'low_stock_threshold': formatted(threshold) if threshold is not None else None,

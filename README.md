@@ -181,3 +181,11 @@ existing database. It can explain approved sales, ingredient usage, current stoc
 and recipes. Enter `OPENROUTER_API_KEY` in `.env`; `OPENROUTER_MODEL=openrouter/free`
 uses free models, with at most two model requests per question and no paid
 fallback. Answers include expandable source figures. See [the assistant guide](docs/assistant.md).
+
+## Actual ice-cream production
+
+Record daily ice-cream powder totals in Inventory, including powders in discarded leftovers. See [the workflow and configuration guide](docs/ice-cream-usage.md).
+
+## Confirmed catalog and demo stock
+
+The confirmed menu and synthetic carton purchase data can be imported together with historical records preserved. See [catalog import and verification](docs/confirmed-catalog.md). Purchases and stock in the demo dataset are invented examples.

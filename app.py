@@ -17,6 +17,7 @@ from shop_config import router as shop_router
 from sales import router as sales_router
 from reversals import router as reversals_router
 from inventory_api import router as inventory_router
+from ice_cream_usage import router as ice_cream_usage_router
 from analytics import router as analytics_router
 from assistant import router as assistant_router
 
@@ -30,6 +31,7 @@ app.include_router(shop_router)
 app.include_router(sales_router)
 app.include_router(reversals_router)
 app.include_router(inventory_router)
+app.include_router(ice_cream_usage_router)
 app.include_router(analytics_router)
 app.include_router(assistant_router)
 
@@ -113,6 +115,11 @@ def chat_page():
 @app.get('/dashboard')
 def dashboard_page():
     return FileResponse(ROOT / 'frontend/dashboard.html', headers={'Cache-Control': 'no-store'})
+
+
+@app.get('/assets/ice-cream-usage.js')
+def ice_cream_script():
+    return FileResponse(ROOT / 'frontend/ice-cream-usage.js', media_type='text/javascript', headers={'Cache-Control': 'no-store'})
 
 
 @app.get('/assets/chartjs-4.5.1.js')

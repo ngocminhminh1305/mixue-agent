@@ -43,7 +43,7 @@ class PostgresTests(unittest.TestCase):
                         conn.exec_driver_sql(statement)
         metadata = MetaData()
         metadata.reflect(bind=self.engine)
-        for module in ('catalog_repository', 'sales', 'inventory_api'):
+        for module in ('catalog_repository', 'sales', 'inventory_api', 'import_confirmed_catalog'):
             for name, value in [('get_engine', self.engine), ('get_tables', metadata.tables)]:
                 mocked = patch(module + '.' + name, return_value=value)
                 mocked.start()
@@ -838,6 +838,244 @@ class PostgresTests(unittest.TestCase):
         self.assertEqual(sorted(statuses), [201, 409])
         self.assertEqual(self.scalar('SELECT count(*) FROM sales_images'), 1)
         self.assertEqual(self.scalar('SELECT count(*) FROM sales_reports'), 1)
+
+
+    def ice_cream_fixture(self, manual=True):
+        from shop_config import Component
+        self.config.stock_items[0].ice_cream_powder = True
+        self.config.stock_items[0].opening_stock = 5000
+        self.config.stock_items[1].name = 'Kem'
+        self.config.stock_items[1].unit = 'g'
+        self.config.stock_items += [
+            StockItem(id='matcha', name='Matcha powder', unit='g', kind='raw', opening_stock=3000, ice_cream_powder=True),
+            StockItem(id='cup', name='Cup', unit='piece', kind='packaging', opening_stock=100),
+            StockItem(id='oreo', name='Oreo', unit='g', kind='raw', opening_stock=1000)]
+        self.config.products[0].components += [Component(item_id='cup', quantity=1), Component(item_id='oreo', quantity=8)]
+        self.config.preparations[0].deduction_mode = 'manual_ice_cream' if manual else 'automatic'
+        return write_config(self.config, initial_import=True)
+
+    def ice_cream_body(self, quantity='1500', item='powder', day='2026-10-22'):
+        response = self.client.get('/api/inventory/ice-cream-usage', params={'used_on': day})
+        self.assertEqual(response.status_code, 200, response.text)
+        stock = next(r for r in response.json()['items'] if r['id'] == item)
+        return {'request_id': str(uuid4()), 'used_on': day, 'note': 'Powders actually used for ice cream',
+                'items': [{'item_id': item, 'total_used': quantity, 'usage_token': stock['usage_token'],
+                           'balance_token': stock['balance_token']}]}
+
+    def test_daily_ice_cream_totals_adjust_difference_and_are_retry_safe(self):
+        self.ice_cream_fixture()
+        body = self.ice_cream_body()
+        response = self.client.post('/api/inventory/ice-cream-usage', json=body)
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(self.stock_state()['quantity'], '3500.000000')
+        replay = self.client.post('/api/inventory/ice-cream-usage', json=body)
+        self.assertEqual(replay.status_code, 200, replay.text)
+        self.assertTrue(replay.json()['replayed'])
+        self.assertEqual(self.scalar("SELECT count(*) FROM inventory_movements WHERE kind='ice_cream_usage'"), 1)
+        for total, expected in [('2000', '3000.000000'), ('2000', '3000.000000'), ('0', '5000.000000')]:
+            result = self.client.post('/api/inventory/ice-cream-usage', json=self.ice_cream_body(total))
+            self.assertEqual(result.status_code, 200, result.text)
+            self.assertEqual(self.stock_state()['quantity'], expected)
+        self.assertEqual(self.scalar("SELECT count(*) FROM inventory_movements WHERE kind='ice_cream_usage'"), 3)
+        row = next(r for r in self.client.get('/api/inventory/ice-cream-usage?used_on=2026-10-22').json()['items'] if r['id'] == 'powder')
+        self.assertTrue(row['recorded'])
+        self.assertEqual(self.scalar('SELECT quantity FROM ice_cream_daily_usage'), 0)
+
+    def test_manual_ice_cream_sales_keep_cups_toppings_and_reversal_keeps_powder_usage(self):
+        self.ice_cream_fixture()
+        result = self.client.post('/api/inventory/ice-cream-usage', json=self.ice_cream_body('1500'))
+        self.assertEqual(result.status_code, 200, result.text)
+        draft = self.post_photo().json()
+        preview = self.consumption_preview(draft)
+        self.assertTrue(preview['can_approve'], preview)
+        self.assertEqual({r['item_id'] for r in preview['consumption']}, {'cup', 'oreo'})
+        self.assertTrue(preview['manual_ice_cream'])
+        approval = self.client.post('/api/sales/reports/' + draft['id'] + '/approve', json=self.approval_body(preview))
+        self.assertEqual(approval.status_code, 200, approval.text)
+        self.assertEqual(self.stock_state()['quantity'], '3500.000000')
+        self.assertEqual(self.stock_state('cup')['quantity'], '97.000000')
+        self.assertEqual(self.stock_state('oreo')['quantity'], '976.000000')
+        dashboard = self.client.get('/api/analytics/dashboard?date_from=2026-10-22&date_to=2026-10-22').json()
+        powder = next(r for r in dashboard['ingredient_usage'] if r['item_id'] == 'powder')
+        self.assertEqual(powder['quantity'], '1500.000000')
+        self.assertEqual(powder['sales_quantity'], '0.000000')
+        approved = approval.json()['report']
+        reverse = self.client.post('/api/sales/reports/' + draft['id'] + '/reverse', json=self.reversal_body(approved))
+        self.assertEqual(reverse.status_code, 200, reverse.text)
+        self.assertEqual(self.stock_state()['quantity'], '3500.000000')
+        self.assertEqual(self.stock_state('cup')['quantity'], '100.000000')
+        self.assertEqual(self.scalar('SELECT quantity FROM ice_cream_daily_usage'), 1500)
+
+    def test_ice_cream_shared_powder_is_still_automatic_in_drinks(self):
+        from shop_config import Component, Preparation
+        saved = self.ice_cream_fixture()
+        saved.stock_items.append(StockItem(id='concentrate', name='Drink concentrate', unit='ml', kind='prepared'))
+        saved.preparations.append(Preparation(id='drink-prep', name='Prepare drink concentrate', output_item_id='concentrate',
+            output_quantity=2000, inputs=[Component(item_id='matcha', quantity=500)]))
+        saved.products[0].components.append(Component(item_id='concentrate', quantity=160))
+        write_config(saved)
+        posted = self.client.post('/api/inventory/ice-cream-usage', json=self.ice_cream_body('1000', item='matcha'))
+        self.assertEqual(posted.status_code, 200, posted.text)
+        draft = self.post_photo().json()
+        preview = self.consumption_preview(draft)
+        use = {r['item_id']: float(r['quantity']) for r in preview['consumption']}
+        self.assertNotIn('powder', use)
+        self.assertEqual(use['matcha'], 120)
+        approved = self.client.post('/api/sales/reports/' + draft['id'] + '/approve', json=self.approval_body(preview))
+        self.assertEqual(approved.status_code, 200, approved.text)
+        self.assertEqual(self.stock_state('matcha')['quantity'], '1880.000000')
+        dashboard = self.client.get('/api/analytics/dashboard?date_from=2026-10-22&date_to=2026-10-22').json()
+        powder = next(r for r in dashboard['ingredient_usage'] if r['item_id'] == 'matcha')
+        self.assertEqual(powder['sales_quantity'], '120.000000')
+        self.assertEqual(powder['ice_cream_quantity'], '1000.000000')
+        self.assertEqual(powder['quantity'], '1120.000000')
+
+    def test_ice_cream_legacy_automatic_reports_block_double_deduction(self):
+        saved = self.ice_cream_fixture(manual=False)
+        draft = self.post_photo().json()
+        preview = self.consumption_preview(draft)
+        approved = self.client.post('/api/sales/reports/' + draft['id'] + '/approve', json=self.approval_body(preview))
+        self.assertEqual(approved.status_code, 200, approved.text)
+        saved.preparations[0].deduction_mode = 'manual_ice_cream'
+        write_config(saved)
+        before = self.stock_state()['quantity']
+        result = self.client.post('/api/inventory/ice-cream-usage', json=self.ice_cream_body('1500'))
+        self.assertEqual(result.status_code, 409, result.text)
+        self.assertEqual(self.stock_state()['quantity'], before)
+        self.assertEqual(self.scalar('SELECT count(*) FROM ice_cream_daily_usage'), 0)
+
+    def test_ice_cream_usage_blocks_switching_back_to_automatic_sales(self):
+        saved = self.ice_cream_fixture()
+        result = self.client.post('/api/inventory/ice-cream-usage', json=self.ice_cream_body())
+        self.assertEqual(result.status_code, 200, result.text)
+        saved.preparations[0].deduction_mode = 'automatic'
+        write_config(saved)
+        draft = self.post_photo().json()
+        preview = self.consumption_preview(draft)
+        self.assertFalse(preview['can_approve'])
+        response = self.client.post('/api/sales/reports/' + draft['id'] + '/approve', json=self.approval_body(preview))
+        self.assertEqual(response.status_code, 400, response.text)
+        self.assertEqual(self.scalar("SELECT count(*) FROM inventory_movements WHERE kind='sale'"), 0)
+
+    def test_ice_cream_usage_rejects_stale_duplicate_and_unflagged_rows(self):
+        self.ice_cream_fixture()
+        body = self.ice_cream_body()
+        response = self.client.post('/api/inventory/ice-cream-usage', json=body)
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(self.client.post('/api/inventory/ice-cream-usage', json={**body, 'request_id': str(uuid4())}).status_code, 409)
+        self.assertEqual(self.client.post('/api/inventory/ice-cream-usage', json={**body, 'note': 'Changed'}).status_code, 409)
+        invalid = self.ice_cream_body('10')
+        invalid['items'][0]['item_id'] = 'oreo'
+        self.assertEqual(self.client.post('/api/inventory/ice-cream-usage', json=invalid).status_code, 400)
+        duplicate = self.ice_cream_body()
+        duplicate['items'] *= 2
+        self.assertEqual(self.client.post('/api/inventory/ice-cream-usage', json=duplicate).status_code, 422)
+        invalid = self.ice_cream_body('-1')
+        self.assertEqual(self.client.post('/api/inventory/ice-cream-usage', json=invalid).status_code, 422)
+
+    def test_ice_cream_usage_concurrent_retries_and_atomic_failure(self):
+        from concurrent.futures import ThreadPoolExecutor
+        self.ice_cream_fixture()
+        body = self.ice_cream_body()
+        def save(_):
+            return TestClient(app.app).post('/api/inventory/ice-cream-usage', json=body).status_code
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            self.assertEqual(list(pool.map(save, range(2))), [200, 200])
+        self.assertEqual(self.stock_state()['quantity'], '3500.000000')
+        self.assertEqual(self.scalar("SELECT count(*) FROM inventory_movements WHERE kind='ice_cream_usage'"), 1)
+        old = self.ice_cream_body('2000')
+        second = self.ice_cream_body('500', item='matcha')['items'][0]
+        second['usage_token'] = '0' * 64
+        old['items'].append(second)
+        response = self.client.post('/api/inventory/ice-cream-usage', json=old)
+        self.assertEqual(response.status_code, 409, response.text)
+        self.assertEqual(self.stock_state()['quantity'], '3500.000000')
+        self.assertEqual(self.stock_state('matcha')['quantity'], '3000.000000')
+
+    def test_ice_cream_modes_roundtrip_and_versions_remain_frozen(self):
+        saved = self.ice_cream_fixture(manual=False)
+        self.assertEqual(read_config().preparations[0].deduction_mode, 'automatic')
+        self.assertTrue(next(s for s in read_config().stock_items if s.id == 'powder').ice_cream_powder)
+        saved.preparations[0].deduction_mode = 'manual_ice_cream'
+        write_config(saved)
+        self.assertEqual(read_config().preparations[0].deduction_mode, 'manual_ice_cream')
+        self.assertEqual(self.scalar("SELECT deduction_mode FROM preparation_versions WHERE version=1"), 'automatic')
+        self.assertEqual(self.scalar("SELECT deduction_mode FROM preparation_versions WHERE version=2"), 'manual_ice_cream')
+
+
+    def test_confirmed_catalog_import_is_atomic_retry_safe_and_preserves_history(self):
+        from test_catalog_import import fixture
+        from import_confirmed_catalog import compile_catalog, apply_catalog
+        self.config.stock_items[0].opening_stock = 5000
+        write_config(self.config, initial_import=True)
+        draft = self.post_photo().json()
+        preview = self.consumption_preview(draft)
+        approved = self.client.post('/api/sales/reports/' + draft['id'] + '/approve', json=self.approval_body(preview))
+        self.assertEqual(approved.status_code, 200, approved.text)
+        snapshot_before = self.scalar("SELECT approval_snapshot::text FROM sales_reports WHERE status='approved'")
+        movements_before = self.scalar("SELECT count(*) FROM inventory_movements WHERE kind='sale'")
+        plan = compile_catalog(fixture(), read_config())
+        result = apply_catalog(plan)
+        self.assertFalse(result['replayed'])
+        self.assertEqual(len(read_config().products), 6)
+        self.assertEqual(self.scalar("SELECT count(*) FROM stock_counts"), 13)
+        self.assertEqual(self.scalar("SELECT count(*) FROM inventory_movements WHERE kind='sale'"), movements_before)
+        self.assertEqual(self.scalar("SELECT approval_snapshot::text FROM sales_reports WHERE status='approved'"), snapshot_before)
+        self.assertTrue(apply_catalog(plan)['replayed'])
+        self.assertEqual(self.scalar("SELECT count(*) FROM stock_counts"), 13)
+        self.assertEqual(self.scalar("SELECT count(*) FROM catalog_imports"), 1)
+        self.assertEqual(self.scalar("SELECT count(*) FROM products WHERE id='drink' AND is_deleted"), 1)
+        # A failure halfway through another import also rolls back the catalog revision.
+        revision = read_config().revision
+        altered = fixture()
+        altered['demo']['items'][0]['opening_stock'] = 6000
+        bad = compile_catalog(altered, read_config())
+        list(bad['inventory'].values())[1]['quantity'] = -1
+        from sqlalchemy.exc import IntegrityError
+        with self.assertRaises(IntegrityError):
+            apply_catalog(bad)
+        self.assertEqual(read_config().revision, revision)
+        self.assertEqual(self.scalar("SELECT count(*) FROM stock_counts"), 13)
+        self.assertEqual(self.scalar("SELECT count(*) FROM catalog_imports"), 1)
+
+    def test_imported_menu_full_receipt_flow_and_manual_powders(self):
+        from test_catalog_import import fixture, empty
+        from import_confirmed_catalog import compile_catalog, apply_catalog
+        plan = compile_catalog(fixture(), empty())
+        apply_catalog(plan)
+        config = read_config()
+        byname = {x.name:x for x in config.stock_items}
+        image = io.BytesIO()
+        Image.new('RGB',(4,4),'yellow').save(image,format='PNG')
+        report = {'date':'2026-10-30','issues':[], 'items':[{'item_name':(p.name.removeprefix('Thêm ') if p.category=='topping' else p.name)+' (MT)','quantity':2,'issues':[]} for p in config.products]}
+        response = self.client.post('/api/sales/drafts',data={'report':json.dumps(report),'report_date':'2026-10-30'},
+            files={'image':('demo.png',image.getvalue(),'image/png')})
+        self.assertEqual(response.status_code,201,response.text)
+        draft = response.json()
+        self.assertTrue(all(x['product_id'] for x in draft['items']))
+        preview = self.consumption_preview(draft)
+        self.assertTrue(preview['can_approve'],preview)
+        usage = {x['item_id']:x for x in preview['consumption']}
+        self.assertNotIn(byname['Bột kem nguyên vị'].id,usage)
+        self.assertNotIn(byname['Bột matcha'].id,usage)
+        self.assertEqual(float(usage[byname['Ốc quế'].id]['quantity']),2)
+        self.assertEqual(float(usage[byname['Cốc U 400 ml'].id]['quantity']),4)
+        self.assertEqual(float(usage[byname['Thạch dừa'].id]['quantity']),450)
+        response = self.client.post('/api/sales/reports/'+draft['id']+'/approve',json=self.approval_body(preview))
+        self.assertEqual(response.status_code,200,response.text)
+        inventory = self.client.get('/api/inventory').json()['items']
+        self.assertTrue(all(x['balance_known'] for x in inventory))
+        powder = next(x for x in inventory if x['id']==byname['Bột kem nguyên vị'].id)
+        self.assertEqual(float(powder['quantity']),5000)
+        daily = self.client.get('/api/inventory/ice-cream-usage?used_on=2026-10-30').json()
+        self.assertEqual(len(daily['items']),2)
+        # Imported usage and recipes also feed the read-only analytics / assistant tools.
+        dashboard = self.client.get('/api/analytics/dashboard?date_from=2026-10-30&date_to=2026-10-30')
+        self.assertEqual(dashboard.status_code,200,dashboard.text)
+        self.assertEqual(dashboard.json()['summary']['approved_reports'],1)
+        import assistant
+        recipes = assistant.lookup('read_recipes',assistant.SearchArgs(search='Kem Ốc Quế',limit=10))
+        self.assertTrue(recipes)
 
 
 if __name__ == '__main__':
