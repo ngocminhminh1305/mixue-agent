@@ -30,11 +30,11 @@ This records my Task Decomposition intervention for the HS2924 Rewiring Project.
 |||3. Build|- Build dashboards, decide on the theme, decide on the design <br> - Build chatbot following the above requirements <br> - Finish frontend with different pages for each features (extraction, updating inventory/recipes, dashboard, chatbot)|
 |||4. Sequential Order|1. study how to do dashboards in html <br> 2. decide graphs/charts the information those give to my mum <br> 3. build dashboard <br> 4. find another model api <br> 5. implement chatbot in my app following my above requirements <br> 6. Finish frontend|
 |||5. Closing prompt: What, if anything, feels clearer or more manageable after this session?|- I'm clear on my tasks, but I know that the workload is high. I hope that those are all things I have to do since I really want to finish this data science project by the end of HS2924 rewiring project <br> - I don't think my task decomposition is that manageable, but I will come to my working session with knowing what I have to do, so I will be less confused, which is good, less overwhelmed for sure <br> - There are many things to do so I will spend more time next week to work on this|
-| **01 Nov 2026** | |1. Feature I will work on| |
-|||2. Study / Research||
-|||3. Build||
-|||4. Sequential Order||
-|||5. Closing prompt: What, if anything, feels clearer or more manageable after this session?||
+| **01 Nov 2026** | 10.00-10.15pm|1. Feature I will work on|**Frontend** <br> - No minimum, finalize in this week <br> **Deployment** <br> - This is the thing I never done before, deploying a software product <br> - Minimum: a hosting website that can serve one user which is my mum, don't have to worry about the traffic of this website since only my mum uses it anyway|
+|||2. Study / Research|**Research on how to do deployment** <br> - how to deploy database, which hosting service, which is free <br> - how to host the website, which is free <br> - how the hosting service can connect to the deploy database |
+|||3. Build|- Basically, not techical build, but I need credential files in this repo to link the hosting database, hosting website, model APIs link together <br> - For better security, my app need login page so only my mum can access to the app even when someone has the application link|
+|||4. Sequential Order|1. do the login page first, how to save for only one user only, no create new account <br> 2. finish frontend, improve the theme <br> 3. learn about deploy (database, website) <br> 4. deploy|
+|||5. Closing prompt: What, if anything, feels clearer or more manageable after this session?|- I don't know if the tasks of this week are underrated or overrated because I has never deployed a product before. I know what I have to do for now, and I think it is not that hard, but the constraint is that which platforms are free <br> - If I still have time left, I will improve the chatbot, make it be able to answer more questions |
 | **08 Nov 2026** | |1. Feature I will work on| |
 |||2. Study / Research||
 |||3. Build||
