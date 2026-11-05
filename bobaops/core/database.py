@@ -4,6 +4,7 @@ from functools import lru_cache
 
 from dotenv import dotenv_values
 from sqlalchemy import MetaData, URL, create_engine
+from sqlalchemy.engine import make_url
 
 from bobaops.core.paths import ROOT
 
@@ -21,6 +22,11 @@ def storage_backend():
 
 def database_url():
     env = environment()
+    if env.get('DATABASE_URL'):
+        url = make_url(env['DATABASE_URL'])
+        if url.get_backend_name() not in {'postgres', 'postgresql'}:
+            raise ValueError('DATABASE_URL must be a PostgreSQL connection URL.')
+        return url.set(drivername='postgresql+psycopg')
     password = env.get('POSTGRES_PASSWORD') or None
     return URL.create('postgresql+psycopg', username=env.get('POSTGRES_USER', 'bobaops'),
                       password=password, host=env.get('POSTGRES_HOST', '127.0.0.1'),
@@ -29,7 +35,15 @@ def database_url():
 
 @lru_cache(maxsize=1)
 def get_engine():
-    return create_engine(database_url(), pool_pre_ping=True, connect_args={'connect_timeout': 5})
+    env = environment()
+    options = {'connect_timeout': 5}
+    if env.get('POSTGRES_SSLMODE'):
+        options['sslmode'] = env['POSTGRES_SSLMODE']
+    if env.get('POSTGRES_SSLROOTCERT'):
+        options['sslrootcert'] = env['POSTGRES_SSLROOTCERT']
+    # Small connection budget for a single shop and hosted PostgreSQL.
+    return create_engine(database_url(), pool_pre_ping=True, pool_size=3, max_overflow=2,
+                         pool_timeout=10, connect_args=options)
 
 
 @lru_cache(maxsize=1)

@@ -678,6 +678,48 @@ class PostgresTests(unittest.TestCase):
         self.assertEqual(post.call_count, 2)
         self.assertEqual(self.scalar('SELECT count(*) FROM inventory_movements'), before)
 
+    def test_complete_receipt_workflow_and_reversal(self):
+        """One receipt travels through the real APIs/SQL; only model transport is mocked."""
+        import httpx
+        self.config.stock_items[0].opening_stock = 1000
+        write_config(self.config, initial_import=True)
+        image = io.BytesIO()
+        Image.new('RGB', (8, 8), 'green').save(image, format='PNG')
+        extracted = {'date': '2026-10-22', 'items': [
+            {'item_name': 'Tea M', 'quantity': 3, 'issues': []}], 'issues': []}
+        reply = httpx.Response(200, json={'candidates': [{'content': {'parts': [{'text': json.dumps(extracted)}]}}]})
+        with patch('bobaops.extraction.routes.settings', return_value=('fake-key', 'test-model')), \
+                patch('httpx.AsyncClient.post', return_value=reply) as provider:
+            response = self.client.post('/api/extract', files={'image': ('receipt.png', image.getvalue(), 'image/png')})
+        self.assertEqual(response.status_code, 200, response.text)
+        provider.assert_called_once()
+        form = {'report': json.dumps(response.json()), 'report_date': extracted['date']}
+        def save():
+            return self.client.post('/api/sales/drafts', data=form,
+                                    files={'image': ('receipt.png', image.getvalue(), 'image/png')})
+        saved = save()
+        self.assertEqual(saved.status_code, 201, saved.text)
+        report = saved.json()
+        self.assertEqual(report['items'][0]['product_id'], 'drink')
+        self.assertEqual(save().status_code, 409)
+        self.assertEqual(self.scalar('SELECT count(*) FROM sales_reports'), 1)
+        self.assertEqual(self.scalar("SELECT quantity FROM inventory_balances WHERE item_id='powder'"), 1000)
+        url = '/api/sales/reports/' + report['id']
+        preview = self.consumption_preview(report)
+        approved = self.client.post(url + '/approve', json=self.approval_body(preview))
+        self.assertEqual(approved.status_code, 200, approved.text)
+        self.assertEqual(self.scalar("SELECT quantity FROM inventory_balances WHERE item_id='powder'"), 880)
+        self.assertEqual(self.client.post(url + '/approve', json=self.approval_body(preview)).status_code, 409)
+        query = '?date_from=2026-10-22&date_to=2026-10-22'
+        summary = self.client.get('/api/analytics/dashboard' + query).json()['summary']
+        self.assertEqual(summary['drinks'], 3)
+        self.assertEqual(summary['revenue_vnd'], 75000)
+        report = approved.json()['report']
+        reversed_report = self.client.post(url + '/reverse', json=self.reversal_body(report))
+        self.assertEqual(reversed_report.status_code, 200, reversed_report.text)
+        self.assertEqual(self.scalar("SELECT quantity FROM inventory_balances WHERE item_id='powder'"), 1000)
+        self.assertEqual(self.client.get('/api/analytics/dashboard' + query).json()['summary']['approved_reports'], 0)
+
 
     def approved_for_reversal(self, quantity=3, opening=1000):
         self.config.stock_items[0].opening_stock = opening

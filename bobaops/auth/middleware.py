@@ -9,7 +9,8 @@ from starlette.responses import JSONResponse, RedirectResponse
 
 from bobaops.auth import security, store
 
-PUBLIC = {'/login', '/api/auth/login', '/assets/app.css', '/assets/login.js'}
+PUBLIC = {'/login', '/api/auth/login', '/assets/app.css', '/assets/login.js',
+          '/health/live', '/health/ready'}
 
 
 def authenticate(request, settings):

@@ -1,0 +1,17 @@
+# Allowlist: secrets, receipts, backups, Git history and local environments never enter the build context.
+**
+!Dockerfile
+!requirements.txt
+!requirements.lock
+!app.py
+!alembic.ini
+!bobaops/
+!bobaops/**
+!frontend/
+!frontend/**
+!migrations/
+!migrations/**
+!scripts/
+!scripts/**
+**/__pycache__/
+**/*.pyc
