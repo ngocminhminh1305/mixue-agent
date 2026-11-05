@@ -1,6 +1,7 @@
 """Save/review drafts and approve frozen consumption in one transaction."""
 import hashlib
 import io
+import logging
 import re
 import unicodedata
 from collections import Counter, defaultdict
@@ -10,7 +11,6 @@ from decimal import Decimal
 from uuid import uuid4
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import delete, func, insert, select, text, update
@@ -19,6 +19,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from bobaops.core.database import get_engine, get_tables, storage_backend
 from bobaops.core.paths import PRIVATE_DATA_DIR
+from bobaops.core.photos import PhotoStore, PhotoStorageError
 
 router = APIRouter(prefix='/api/sales')
 IMAGE_DIR = PRIVATE_DATA_DIR / 'sales_images'
@@ -255,6 +256,7 @@ def save_extraction(extraction, data, extension, report_date, powder_usage=None)
         raise HTTPException(422, 'Ngày dùng bột phải trùng ngày trên hoá đơn.')
     digest = hashlib.sha256(data).hexdigest()
     written = None
+    photos = PhotoStore(IMAGE_DIR)
     try:
         with connection() as (conn, t):
             # Serialize uploads of the same photo across dates, including concurrent requests.
@@ -274,12 +276,9 @@ def save_extraction(extraction, data, extension, report_date, powder_usage=None)
                 raise HTTPException(400, 'Add or import your products in Shop setup before saving sales.')
             matches, available = matcher(conn, t)
             image_id = uuid4().hex
-            IMAGE_DIR.mkdir(parents=True, exist_ok=True)
-            written = IMAGE_DIR / f'{image_id}.{extension}'
-            with written.open('xb') as file:
-                file.write(data)
+            written = photos.write(f'{image_id}.{extension}', data)
             conn.execute(insert(t['sales_images']).values(id=image_id, report_id=identifier,
-                         content_sha256=digest, source_path=written.name, extraction=extraction.model_dump(mode='json')))
+                         content_sha256=digest, source_path=written, extraction=extraction.model_dump(mode='json')))
             for index, item in enumerate(extraction.items):
                 product_id = resolve_product(item.item_name, matches, available)['product_id']
                 conn.execute(insert(t['sales_items']).values(id=f'{image_id}_{index:04d}', report_id=identifier,
@@ -295,7 +294,10 @@ def save_extraction(extraction, data, extension, report_date, powder_usage=None)
         return result
     except BaseException:
         if written is not None:
-            written.unlink(missing_ok=True)
+            try:
+                photos.delete(written)
+            except (PhotoStorageError, OSError):
+                logging.getLogger(__name__).warning('Receipt rollback completed; storage cleanup needs a retry.')
         raise
 
 
@@ -468,10 +470,7 @@ def get_image(identifier: str):
         name = conn.scalar(select(t['sales_images'].c.source_path).where(t['sales_images'].c.id == identifier))
     if not name:
         raise HTTPException(404, 'Photo not found.')
-    path = (IMAGE_DIR / name).resolve()
-    if path.parent != IMAGE_DIR.resolve() or not path.is_file():
-        raise HTTPException(404, 'Photo file not found. Include private sales_images in your backups.')
-    return FileResponse(path, headers={'Cache-Control': 'no-store'})
+    return PhotoStore(IMAGE_DIR).response(name)
 
 
 @router.delete('/reports/{identifier}')
@@ -500,11 +499,7 @@ def delete_draft(identifier: str, revision: int = Query(ge=0)):
     cleanup_failed = False
     for name in filenames:
         try:
-            path = (IMAGE_DIR / name).resolve()
-            if path.parent != IMAGE_DIR.resolve():
-                cleanup_failed = True
-                continue
-            path.unlink(missing_ok=True)
-        except OSError:
+            PhotoStore(IMAGE_DIR).delete(name)
+        except (OSError, PhotoStorageError):
             cleanup_failed = True
     return {'deleted': True, 'date': report_date, 'photo_cleanup_pending': cleanup_failed}

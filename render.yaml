@@ -1,0 +1,46 @@
+services:
+  - type: web
+    name: bobaops
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health/ready
+    autoDeployTrigger: 'off'
+    envVars:
+      - key: SHOP_STORAGE
+        value: postgres
+      - key: RECEIPT_STORAGE
+        value: supabase
+      - key: POSTGRES_SSLMODE
+        value: require
+      - key: BOBAOPS_DATA_DIR
+        value: /tmp/bobaops
+      - key: SHOP_TIMEZONE
+        value: Asia/Ho_Chi_Minh
+      - key: AUTH_COOKIE_SECURE
+        value: 'true'
+      - key: AUTH_SESSION_TTL_SECONDS
+        value: '28800'
+      - key: SUPABASE_STORAGE_BUCKET
+        value: receipts
+      - key: GEMINI_MODEL
+        value: gemini-3.5-flash-lite
+      - key: OPENROUTER_MODEL
+        value: openrouter/free
+      - key: AUTH_SESSION_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: AUTH_USERNAME
+        sync: false
+      - key: AUTH_PASSWORD_HASH
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false

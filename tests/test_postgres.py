@@ -9,6 +9,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from sqlalchemy import MetaData, create_engine, text
+from sqlalchemy.exc import SQLAlchemyError
 from fastapi.testclient import TestClient
 from auth_support import authenticated_client
 from PIL import Image
@@ -59,7 +60,88 @@ class PostgresTests(unittest.TestCase):
             mocked.start()
             self.addCleanup(mocked.stop)
         self.client = authenticated_client(self, app.app)
+        mocked = patch('bobaops.core.photos.environment', return_value={'RECEIPT_STORAGE': 'local'})
+        mocked.start()
+        self.addCleanup(mocked.stop)
         self.config = ShopConfig.model_validate(sample())
+
+    def test_cloud_receipt_upload_read_duplicate_and_delete(self):
+        from test_photos import remote_storage
+        fake = remote_storage(self)
+        write_config(self.config, initial_import=True)
+        response = self.post_photo()
+        self.assertEqual(response.status_code, 201, response.text)
+        draft = response.json()
+        self.assertEqual(len(fake.objects), 1)
+        self.assertTrue(self.scalar('SELECT source_path FROM sales_images').startswith('supabase:receipts/'))
+        self.assertEqual(self.client.get(draft['images'][0]['url']).status_code, 200)
+        self.assertEqual(TestClient(app.app).get(draft['images'][0]['url']).status_code, 401)
+        self.assertEqual(self.post_photo().status_code, 409)
+        self.assertEqual(len(fake.objects), 1)
+        result = self.client.delete('/api/sales/reports/' + draft['id'] + '?revision=' + str(draft['revision']))
+        self.assertEqual(result.status_code, 200, result.text)
+        self.assertFalse(result.json()['photo_cleanup_pending'])
+        self.assertFalse(fake.objects)
+
+    def test_cloud_copy_preserves_current_data_and_refuses_overwrite(self):
+        from scripts.prepare_cloud import copy_shop
+        # Include generated identity IDs, version records, and a non-zero current balance.
+        self.config.stock_items[0].opening_stock = 1000
+        saved = write_config(self.config, initial_import=True)
+        with self.engine.begin() as c:
+            c.execute(text("INSERT INTO product_aliases (product_id,name) VALUES ('drink','Alias one')"))
+        target_schema = self.schema + '_copy'
+        with self.admin.begin() as c:
+            c.execute(text('CREATE SCHEMA ' + target_schema))
+        def cleanup():
+            with self.admin.begin() as c:
+                c.execute(text('DROP SCHEMA ' + target_schema + ' CASCADE'))
+        self.addCleanup(cleanup)
+        target = create_engine(self.engine.url, connect_args={'options': '-csearch_path=' + target_schema})
+        self.addCleanup(target.dispose)
+        with target.begin() as c:
+            from alembic import command
+            from alembic.config import Config
+            cfg = Config(str(Path(__file__).resolve().parents[1] / 'alembic.ini'))
+            cfg.attributes['connection'] = c
+            command.upgrade(cfg, 'head')
+            self.assertEqual(c.scalar(text('SELECT version_num FROM alembic_version')), '0008')
+        with self.engine.connect() as source, target.begin() as dest:
+            result = copy_shop(source, dest)
+            self.assertEqual(result['products'], 1)
+            self.assertEqual(dest.scalar(text("SELECT quantity FROM inventory_balances WHERE item_id='powder'")), 1000)
+            self.assertEqual(dest.scalar(text('SELECT revision FROM shop_state')), saved.revision)
+            # The target sequence must advance past the explicitly copied alias ID.
+            dest.execute(text("INSERT INTO product_aliases (product_id,name) VALUES ('drink','Alias two')"))
+            self.assertEqual(dest.scalar(text('SELECT count(*) FROM product_aliases')), 2)
+            self.assertEqual(dest.scalar(text('SELECT count(*) FROM auth_sessions')), 0)
+        with self.engine.connect() as source, target.begin() as dest:
+            with self.assertRaises(ValueError):
+                copy_shop(source, dest)
+
+    def test_cloud_upload_is_cleaned_up_after_database_rollback(self):
+        from test_photos import remote_storage
+        fake = remote_storage(self)
+        write_config(self.config, initial_import=True)
+        with patch('bobaops.sales.routes.details', side_effect=SQLAlchemyError('simulated failure')):
+            self.assertEqual(self.post_photo().status_code, 503)
+        self.assertFalse(fake.objects)
+        self.assertEqual(self.scalar('SELECT count(*) FROM sales_reports'), 0)
+
+    def test_cloud_correction_draft_keeps_photo_referenced_by_original(self):
+        from test_photos import remote_storage
+        fake = remote_storage(self)
+        config, report = self.approved_for_reversal()
+        result = self.client.post('/api/sales/reports/' + report['id'] + '/reverse', json=self.reversal_body(report))
+        self.assertEqual(result.status_code, 200, result.text)
+        correction = self.client.get('/api/sales/reports').json()
+        draft = next(r for r in correction if r['status'] == 'draft')
+        full = self.client.get('/api/sales/reports/' + draft['id']).json()
+        deleted = self.client.delete('/api/sales/reports/' + draft['id'] + '?revision=' + str(full['revision']))
+        self.assertEqual(deleted.status_code, 200, deleted.text)
+        self.assertEqual(len(fake.objects), 1)
+        original = self.client.get('/api/sales/reports/' + report['id']).json()
+        self.assertEqual(self.client.get(original['images'][0]['url']).status_code, 200)
 
     def drop_schema(self):
         with self.admin.begin() as conn:

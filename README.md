@@ -228,6 +228,8 @@ hosting and database migration are separate work that has not been deployed yet.
 
 ## Project layout
 
+For the chosen Render Free + Supabase Free setup, follow [the cloud setup guide](deploy/README.md).
+
 Docker app setup, hosted PostgreSQL configuration, health checks, backups and release
 steps are in [the deployment guide](DEPLOYMENT.md). Use `docker compose --profile app up -d --build app`
 after completing the first-time migration and photo-copy instructions there.

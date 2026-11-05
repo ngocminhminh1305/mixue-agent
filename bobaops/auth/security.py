@@ -59,7 +59,7 @@ def load_settings():
     return Settings(env.get('AUTH_USERNAME') or '', env.get('AUTH_PASSWORD_HASH') or '',
                     env.get('AUTH_SESSION_SECRET') or '',
                     (env.get('AUTH_COOKIE_SECURE') or 'false').lower() == 'true', ttl,
-                    env.get('AUTH_ALLOWED_ORIGIN') or '')
+                    env.get('AUTH_ALLOWED_ORIGIN') or env.get('RENDER_EXTERNAL_URL') or '')
 
 
 def session_digest(sid):

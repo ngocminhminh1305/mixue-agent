@@ -6,7 +6,13 @@ if context.is_offline_mode():
     with context.begin_transaction():
         context.run_migrations()
 else:
-    with get_engine().connect() as connection:
+    def migrate(connection):
         context.configure(connection=connection)
         with context.begin_transaction():
             context.run_migrations()
+    supplied = context.config.attributes.get('connection')
+    if supplied is not None:
+        migrate(supplied)
+    else:
+        with get_engine().connect() as connection:
+            migrate(connection)

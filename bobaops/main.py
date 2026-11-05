@@ -1,6 +1,7 @@
 """Application composition and frontend file routes."""
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
+from bobaops.core.photos import PhotoStorageError, PhotoNotFound
 
 from bobaops.analytics.routes import router as analytics_router
 from bobaops.assistant.routes import router as assistant_router
@@ -19,6 +20,11 @@ app = FastAPI(title="BobaOps")
 app.add_middleware(PrivateAppMiddleware)
 app.include_router(auth_router)
 app.include_router(health_router)
+
+
+@app.exception_handler(PhotoStorageError)
+async def photo_error(request, error):
+    return JSONResponse({'detail': str(error)}, status_code=404 if isinstance(error, PhotoNotFound) else 503)
 for router in (shop_router, sales_router, reversals_router, inventory_router,
                ice_cream_usage_router, analytics_router, assistant_router, extraction_router):
     app.include_router(router)

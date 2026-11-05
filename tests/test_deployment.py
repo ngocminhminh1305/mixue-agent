@@ -16,6 +16,15 @@ class DeploymentTests(unittest.TestCase):
     def tearDown(self):
         database.get_engine.cache_clear()
 
+    def test_render_origin_is_automatic_and_custom_override_wins(self):
+        from bobaops.auth import security
+        values = {'AUTH_USERNAME': TEST_SETTINGS.username, 'AUTH_PASSWORD_HASH': TEST_SETTINGS.password_hash,
+                  'AUTH_SESSION_SECRET': TEST_SETTINGS.secret, 'RENDER_EXTERNAL_URL': 'https://shop.onrender.com'}
+        with patch.object(security, 'environment', return_value=values):
+            self.assertEqual(security.load_settings().origin, 'https://shop.onrender.com')
+            values['AUTH_ALLOWED_ORIGIN'] = 'https://myshop.example'
+            self.assertEqual(security.load_settings().origin, 'https://myshop.example')
+
     def test_hosted_url_keeps_credentials_and_tls_query_without_fallback_to_local(self):
         for scheme in ('postgres', 'postgresql', 'postgresql+psycopg'):
             with patch.object(database, 'environment', return_value={
@@ -75,6 +84,14 @@ class DeploymentTests(unittest.TestCase):
                 self.assertEqual(client.get('/health/ready').status_code, 503)
             with patch.object(health.os, 'access', return_value=False):
                 self.assertEqual(client.get('/health/ready').status_code, 503)
+            # Cloud photo storage must not require a writable persistent filesystem.
+            with patch.object(health, 'PhotoStore') as photos, patch.object(health.os, 'access', return_value=False):
+                photos.return_value.backend = 'supabase'
+                # Avoid the global os.access patch influencing Alembic's own path check.
+                with patch.object(health, 'ScriptDirectory') as script:
+                    script.return_value.get_current_head.return_value = expected
+                    self.assertEqual(client.get('/health/ready').status_code, 200)
+                    photos.return_value.check_private_bucket.assert_called_once()
             engine.connect.side_effect = OperationalError('private query', {}, Exception('secret password'))
             response = client.get('/health/ready')
             self.assertEqual(response.status_code, 503)
