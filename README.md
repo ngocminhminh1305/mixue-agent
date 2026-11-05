@@ -1,243 +1,117 @@
 # BobaOps AI
 
-BobaOps AI is an end-to-end operations and analytics platform for my mom's beverage shop.
+**From Vietnamese sales-report photos to structured sales, auditable inventory and a grounded AI assistant.**
 
-The project is inspired by my mom's real business workflow. Every day, she manually enters sales for each item into a spreadsheet to calculate revenue, inventory, costs, and profit. While this works for day-to-day operations, the manual process makes it difficult to store and analyze detailed historical data, such as item-level sales over time. As a result, she can mainly track short-term changes in revenue and profit, but has limited visibility into deeper trends such as product performance, sales patterns, and inventory usage.
+BobaOps is a deployed personal project inspired by my mom’s beverage shop. I built it to connect a messy, manual business workflow with data engineering, applied NLP, relational database design and backend development.
 
-The goal is to turn that process into a simple, automated, more analytical:
+[Live application](https://bobaops.onrender.com) · [Engineering tests](tests) · [Local setup](deploy/local-development.md) · [Deployment guide](deploy/README.md)
 
-**Upload → Review → Approve → Analyze**
+*The live app requires private login. Free hosting may take a moment to wake up.*
 
-## Workflow
+## The problem
+
+A daily sales report tells the shop how many drinks were sold, but estimating remaining stock requires another step: connecting each drink to its recipe and converting prepared ingredients back into raw materials. A photo of that report also introduces extraction errors, inconsistent names and incomplete rows.
+
+I wanted to build the entire path from that image to useful operational data, with a way for a person to review uncertain results and correct mistakes. The challenge was making the data reliable enough to update inventory, rather than stopping at a successful AI extraction.
+
+## What I built
+
+**Upload → Extract → Match → Review → Approve → Analyze**
+
+- **Sales ingestion:** Gemini extracts dates, product names and quantities from Vietnamese report photos. Multiple photos can form one daily report.
+- **Catalog matching:** text normalization and aliases handle known variations; character TF-IDF and cosine similarity suggest matches for imperfect names. Uncertain rows remain available for human review.
+- **Inventory accounting:** approved quantities consume ingredients through product recipes and preparation yields. Purchases, physical counts, waste and reversals form a stock-movement history.
+- **Analytics:** a dashboard shows approved sales trends, estimated revenue, product rankings, ingredient usage and low-stock indicators.
+- **Grounded assistant:** Vietnamese questions are answered using controlled backend tools that retrieve current shop data. The assistant cannot modify stock or execute arbitrary SQL.
+- **Editable shop configuration:** products, prices, ingredients, recipes and preparation yields can change through the app, with versions retained for historical calculations.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    UI[Browser interface] --> API[FastAPI app · Render]
+    API --> Extract[Gemini · structured extraction]
+    API --> Match[Normalization + TF-IDF matching]
+    API --> DB[(Supabase PostgreSQL)]
+    API --> Storage[Supabase · private receipt photos]
+    API --> Chat[OpenRouter · controlled tool calling]
+```
+
+The frontend and API run in one Docker service. PostgreSQL stores the operational records and inventory ledger; private object storage preserves photos across app restarts. Python and SQL calculate the figures used by the dashboard and assistant.
+
+## Engineering decisions
+
+### Keep AI output separate from inventory updates
+
+An extracted row is a draft, not an instruction to deduct stock. Structured-output validation, product matching and human review precede approval. A preview shows the proposed consumption, and stale previews are rejected when the underlying data changes.
+
+This separation lets the model help interpret the image while database rules govern the sales and inventory records.
+
+### Use lightweight NLP for imperfect product names
+
+Receipt names can include irrelevant suffixes, spelling differences or size labels. I combined deterministic preprocessing with character TF-IDF/cosine similarity instead of making another model request for every match. Size and variant rules constrain the matching, and ambiguous results are presented as suggestions.
+
+The matching runs locally, is inspectable, and adds no external model requests. It still needs evaluation against a labelled receipt dataset before claiming an accuracy score.
+
+### Model stock as a ledger and preserve historical versions
+
+Inventory comes from signed movements rather than repeatedly overwriting one balance. Approval records the applicable recipe, preparation-yield and price versions, so later catalog edits do not rewrite historical consumption.
+
+Sales approval and its deductions commit in one database transaction. Duplicate-image checks, report locks and retry safeguards address repeated uploads and concurrent requests. Reversing an approved report restores its recorded deductions and retains the original report in history.
+
+### Translate preparation recipes into raw-material usage
+
+A drink may consume prepared tea or milk tea, while the shop purchases leaves and powder. The calculation follows the recipe through its preparation yield and keeps grams, millilitres and packaging units distinct.
+
+For example, with **synthetic quantities**:
 
 ```text
-Daily Sales PDF
-      ↓
-PDF Extraction
-      ↓
-Structured Sales Rows
-      ↓
-Product Normalization & Matching
-      ↓
-Human Review for Uncertain Rows
-      ↓
-Validation & Duplicate Check
-      ↓
-Approve Import
-      ↓
-PostgreSQL
-      ↓
-Sales + Inventory + Cost Calculations
-      ↓
-Analytics Dashboard
-      ↓
-Grounded AI Assistant
+3 drinks × 160 ml prepared base per drink × (500 g powder / 2,000 ml batch yield)
+= 120 g raw powder consumed
 ```
 
-## MVP Features
+Ice cream required a different approach: unsold prepared batches are discarded, so sales alone underestimate powder usage. The app records actual daily powder usage separately, while physical counts correct differences between standard recipes and real preparation.
 
-- PDF sales report extraction
-- Product and variant matching
-- Confidence-based human review
-- Duplicate-import protection
-- PostgreSQL data storage
-- Recipe-based inventory deduction
-- Purchases and inventory movements
-- Revenue, ingredient cost, and estimated gross profit
-- Daily, weekly, and monthly analytics
-- AI assistant using controlled backend tools
-- Automated tests, Docker, CI, and deployment
+### Ground the assistant in backend calculations
 
-## Tech Stack
+The assistant reads sales, stock and recipes through predefined tools. Numeric calculations stay in Python/SQL; the model explains the returned data. Responses include source figures, and each question is limited to at most two model requests.
 
-- **Backend:** Python, FastAPI, Pydantic
-- **Database:** PostgreSQL, SQLAlchemy
-- **Data:** scikit-learn (TF-IDF and cosine similarity)
-- **Frontend:** HTML, CSS, JavaScript, Chart.js
-- **Testing:** unittest and isolated PostgreSQL integration tests
-- **Local infrastructure:** Docker Compose for PostgreSQL
-- **AI:** LLM API with structured tool calling
+### Deploy with persistent data and private access
 
-## Development Approach
+The app uses Argon2id password hashing, expiring PostgreSQL-backed sessions, logout revocation and CSRF protection. Receipt photos pass through authenticated backend endpoints; storage secret keys are never sent to the browser.
 
-The project is built incrementally:
+Docker packages the runtime, Alembic manages schema changes, and GitHub Actions runs tests and builds the image. Moving photos from local disk to Supabase Storage allows them to survive Render restarts.
 
-```text
-Data Audit
-→ Database
-→ PDF Pipeline
-→ Matching & Review
-→ Inventory & Costing
-→ Analytics
-→ AI Assistant
-→ Testing & Deployment
-```
+## Technical skills developed
 
-The priority is to build a reliable end-to-end workflow rather than adding unnecessary architectural complexity.
+| Area | Practical experience from this project |
+| --- | --- |
+| Data engineering | Ingesting unstructured images, validating structured records, normalizing names and building a reviewed ingestion workflow |
+| Database design | Relational modeling, constraints, migrations, versioned recipes and prices, inventory ledgers and transactional updates |
+| Applied NLP | Character TF-IDF, cosine similarity, domain-specific preprocessing and handling ambiguous matches |
+| Backend engineering | FastAPI endpoints, Pydantic validation, concurrency controls, retry safety and external API integration |
+| Analytics and AI | SQL aggregation, Chart.js dashboards, tool calling and separating model explanations from deterministic calculations |
+| Security and deployment | Password hashing, sessions, CSRF, private object storage, Docker, CI and cloud configuration |
+| Requirements analysis | Turning shop practices into explicit rules, identifying exceptions and revising assumptions after feedback |
 
-## Privacy
+## Verification
 
-Real shop data may be used privately for development, but the public repository will contain only sanitized or synthetic data. Secrets, payment information, supplier-sensitive data, and proprietary recipe quantities will not be committed.
+The project includes **188 automated tests**, covering validation and calculations as well as integration scenarios against isolated PostgreSQL schemas. Cases include:
 
-## Status
+- A receipt moving through extraction, matching, approval, inventory deduction, dashboard reporting and reversal.
+- Duplicate uploads, repeated approval attempts, concurrent requests and stale edits.
+- Transaction rollback, physical stock corrections and recipe-version preservation.
+- Private photo access, failed-upload cleanup and photos shared by original reports and correction drafts.
+- Login, session expiry, logout revocation, CSRF checks and cloud data-copy safeguards.
 
-**In development**
+AI and storage responses are mocked in the automated suite. Separate Docker checks verified data and photo persistence after container recreation and database backup restoration. See [the tests](tests) and [verification instructions](deploy/local-development.md#tests).
 
-## Run the image extraction prototype
+## Stack
 
-The local Python backend serves a browser interface for uploading a sales photo,
-reviewing extracted dates, item names, and quantities, and downloading JSON.
-Extraction alone does not persist anything. Click **Save sales draft** to store
-the report and source photo in PostgreSQL/private storage. Inventory is unchanged.
+**Python 3.14 · FastAPI · Pydantic · PostgreSQL · SQLAlchemy · Alembic · scikit-learn · Gemini · OpenRouter · HTML/CSS/JavaScript · Chart.js · Docker · GitHub Actions · Render · Supabase**
 
-```sh
-source /Users/ngocminh/Desktop/venvs/mixue-agent/bin/activate
-python3 -m pip install -r requirements.txt
-cp .env.example .env  # Only if .env does not already exist
-```
+## Scope and next improvements
 
-Set `GEMINI_API_KEY` in `.env`. Keep it private; `.env` is excluded from Git.
-The default model is `gemini-3.5-flash-lite`, optimized for simple extraction.
-The connection timeout is 20 seconds and response timeout is 180 seconds.
-Keep your Google project on the free
-tier without paid billing if you want to avoid charges; a free tier is subject
-to account quotas and availability. The application cannot determine your
-Google project's billing status.
+This is a personal project informed by a real shop workflow, not a claim of measured business adoption or time savings. Some purchase and stock values are synthetic. Revenue is estimated from saved catalog prices; discounts and profit are not calculated.
 
-```sh
-python3 -m uvicorn app:app --host 127.0.0.1 --port 8000
-```
-
-Open http://127.0.0.1:8000 for Tổng quan. Select **Nhập doanh số** (`/upload`)
-and choose a JPG, PNG, or WebP under 10 MB. Click **Trích xuất** to send the photo to Google Gemini. Photos and results
-are persisted only when you explicitly save a draft. Free-tier Gemini inputs may be used by Google
-to improve its products. Review results against the original photo; cropped or
-unreadable rows need attention. This is a local development tool, without login.
-
-The backend re-reads `.env` for each request. After adding your key, select a
-photo again to refresh the interface's configuration status. One click makes
-one provider request, with no automatic retry or paid fallback.
-
-Run offline checks (no API key or provider calls required):
-
-```sh
-python3 -m unittest discover -s tests -v
-```
-
-## Database and shop setup
-
-Follow [the database setup guide](docs/database-setup.md) to start local PostgreSQL
-and pgAdmin, run migrations, and import your private catalog. With
-`SHOP_STORAGE=postgres`, http://127.0.0.1:8000/setup reads and saves database records.
-The original private JSON stays untouched as an import source. Explicit
-`SHOP_STORAGE=json` retains the separate earlier prototype.
-
-Shop setup edits products, prices, recipes, stock items, starting balances,
-preparation yields and the five questions for your mom. Recipe, preparation-yield
-and price edits create versions. An outdated tab cannot overwrite a newer revision.
-Deleted records are archived to preserve historical references. Starting-stock
-edits create ledger adjustments; they are not purchase transactions. Unknown
-cone/topping prices and initial stock remain blank, and assumptions stay marked.
-Stock units/types and preparation output identities are protected after import;
-add new records when those identities change. Click **Download backup** to export
-the current settings; full database backups are described in the setup guide.
-
-Daily sales drafts can now be saved and edited at `/sales`; see
-[the sales draft guide](docs/sales-drafts.md). Multiple photos for one date share
-one report. Exact duplicate uploads are rejected, and overlapping product rows
-remain separate with warnings until corrected. Conservative name/alias matching
-links recognizable items to catalog products; unmatched rows remain editable.
-Use **Preview consumption** to calculate raw ingredients and packaging from the
-current recipes and preparation yields. Resolve missing products/recipes and
-duplicate rows, acknowledge provisional assumptions, and confirm the report is
-complete before approving. Approval freezes the calculation, recipe/yield/price
-versions, and records inventory deductions in one transaction. Repeated approval
-cannot deduct twice. Unknown starting stock and negative estimates are flagged.
-See [the consumption guide](docs/consumption.md). The [Inventory page](http://127.0.0.1:8000/inventory)
-shows balances, purchases, physical counts, waste, low-stock thresholds and history.
-Physical counts record the difference from the ledger and establish a known
-baseline, including a count of zero. Entry retries use request IDs to prevent
-duplicate purchases. See [the inventory guide](docs/inventory-management.md).
-Approved reports can be reversed with a reason and a reviewed stock preview.
-Original reports remain in history; a correction draft can reuse their photos
-and rows. See [the reversal guide](docs/sales-reversals.md).
-
-Menu and recipe edits change records through the app. Structural schema changes
-use Alembic migrations. Version dates currently use the save time; backdated
-changes need a future effective-date interface.
-
-## Analytics dashboard
-
-Open [Dashboard](http://127.0.0.1:8000/dashboard) for approved sales trends,
-product rankings, raw-ingredient usage, purchase/waste/correction summaries and
-current stock warnings. Prices saved at approval determine estimated sales value;
-missing prices and missing report dates are disclosed. No AI calls or new
-packages are needed. See [how the dashboard works](docs/analytics.md).
-
-## AI assistant
-
-Open `/chat` for a Vietnamese-first, read-only assistant using OpenRouter and the
-existing database. It can explain approved sales, ingredient usage, current stock
-and recipes. Enter `OPENROUTER_API_KEY` in `.env`; `OPENROUTER_MODEL=openrouter/free`
-uses free models, with at most two model requests per question and no paid
-fallback. Answers include expandable source figures. See [the assistant guide](docs/assistant.md).
-
-## Actual ice-cream production
-
-Record daily ice-cream powder totals in Inventory, including powders in discarded leftovers. See [the workflow and configuration guide](docs/ice-cream-usage.md).
-
-## Confirmed catalog and demo stock
-
-The confirmed menu and synthetic carton purchase data can be imported together with historical records preserved. See [catalog import and verification](docs/confirmed-catalog.md). Purchases and stock in the demo dataset are invented examples.
-
-Receipt names use exact matching followed by local character TF-IDF/cosine ranking, with guarded automatic choices and manual suggestions. See [product matching](docs/product-matching.md).
-
-
-## Private login
-
-All shop pages and APIs require one private account. There is no public registration.
-Run these commands from the project folder with the project's virtual environment active:
-
-```sh
-python3 -m pip install -r requirements.txt
-docker compose up -d db
-python3 -m alembic upgrade head
-python3 -m scripts.setup_login
-python3 -m uvicorn app:app --host 127.0.0.1 --port 8000 --reload
-```
-
-The setup command prompts for a username and a password of at least 12 characters.
-It writes an Argon2id password hash and a random session secret into the ignored `.env`;
-the password is hidden while typing and is never saved as plaintext. Open `/login`
-and sign in. Re-run the setup command to change a forgotten password; this invalidates
-existing sessions. Restart the server after changing settings. Missing login settings
-leave the app locked and show the setup instruction.
-
-Sessions expire after eight hours by default. PostgreSQL stores hashed session IDs
-and logout revokes them, including copied cookies. It also enforces five login attempts
-per client address in 15 minutes. Data changes require a session-bound CSRF token,
-which the frontend sends automatically. These login tables require PostgreSQL even
-when using the legacy JSON shop-storage mode. Account credentials live in `.env`,
-not in the shop catalog or product tables.
-
-For deployment behind HTTPS, set `AUTH_COOKIE_SECURE=true` and
-`AUTH_ALLOWED_ORIGIN=https://your-app-host` with the exact public origin. Keep
-`AUTH_SESSION_SECRET` private and identical across app workers. Configure the trusted
-reverse proxy correctly so the app sees the client address for login limits. Public
-hosting and database migration are separate work that has not been deployed yet.
-
-## Project layout
-
-For the chosen Render Free + Supabase Free setup, follow [the cloud setup guide](deploy/README.md).
-
-Docker app setup, hosted PostgreSQL configuration, health checks, backups and release
-steps are in [the deployment guide](DEPLOYMENT.md). Use `docker compose --profile app up -d --build app`
-after completing the first-time migration and photo-copy instructions there.
-
-- `bobaops/`: backend package, grouped into auth, catalog, extraction, sales, inventory, analytics and assistant features.
-- `bobaops/core/`: shared database configuration and project paths.
-- `scripts/`: administrative imports, run with `python3 -m scripts.<name>`.
-- `frontend/`: HTML, CSS and JavaScript.
-- `migrations/`, `tests/`, `docs/`: database history, checks and documentation.
-
-`app.py` is a small entry point, so the existing `uvicorn app:app` command still works. See [the code structure guide](docs/code-structure.md) for the full tree and updated import commands. Private data and `.env` remain in their existing locations.
+Next priorities are a labelled benchmark for extraction and matching, and a public walkthrough with synthetic data so reviewers can explore the workflow without private credentials. Shop records, recipe quantities, secrets and receipt photos remain outside the public repository.
