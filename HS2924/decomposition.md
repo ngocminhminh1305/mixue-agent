@@ -35,11 +35,11 @@ This records my Task Decomposition intervention for the HS2924 Rewiring Project.
 |||3. Build|- Basically, not techical build, but I need credential files in this repo to link the hosting database, hosting website, model APIs link together <br> - For better security, my app need login page so only my mum can access to the app even when someone has the application link|
 |||4. Sequential Order|1. do the login page first, how to save for only one user only, no create new account <br> 2. finish frontend, improve the theme <br> 3. learn about deploy (database, website) <br> 4. deploy|
 |||5. Closing prompt: What, if anything, feels clearer or more manageable after this session?|- I don't know if the tasks of this week are underrated or overrated because I has never deployed a product before. I know what I have to do for now, and I think it is not that hard, but the constraint is that which platforms are free <br> - If I still have time left, I will improve the chatbot, make it be able to answer more questions |
-| **08 Nov 2026** | |1. Feature I will work on| |
-|||2. Study / Research||
-|||3. Build||
-|||4. Sequential Order||
-|||5. Closing prompt: What, if anything, feels clearer or more manageable after this session?||
+| **08 Nov 2026** |01.53-01.56pm|1. Feature I will work on|- There is no more feature to work on for now, from now, my mum will strart use this, so my task is to test the user experience, improve user's experience, fix bugs when there is bug, make sure the app still run smoothly after long time|
+|||2. Study / Research|**None**|
+|||3. Build|**None**|
+|||4. Sequential Order|**None**|
+|||5. Closing prompt: What, if anything, feels clearer or more manageable after this session?|**None**|
 
 
 ## Note:
