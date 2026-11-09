@@ -17,4 +17,4 @@
 ## Note 
 1) Prof's comment: `Consider also adding, an evaluative pre/post 6-weeks of intervention stress scale.`
 - Pre stress scale: This was added in the project proposal, it was `9/10`
-- Post stress scale: Since I finished the data science project, the stress score is `4/10`. Because my app still needs to do many things to improve it
+- Post stress scale: Since I finished the data science project, the stress score is `4/10`. Because my app still needs to do many things to improve it (user experience tests and improvements), it is not completely 0 now but I can say I finished many big parts of the project
